@@ -1,0 +1,90 @@
+const SPREADSHEET_ID = "<your Google Sheet ID>"; // from its URL: /spreadsheets/d/<THIS_PART>/edit
+
+// Sheet tabs this endpoint is allowed to serve, keyed by the ?sheet= value.
+const ALLOWED_SHEETS = ["Location", "Auto", "Scraper"];
+
+function doGet(e) {
+  const sheetName = e && e.parameter && e.parameter.sheet;
+  const latestOnly = !!(e && e.parameter && e.parameter.latest);
+  const excludeLatest = !!(e && e.parameter && e.parameter.exclude_latest);
+  const lineParam = e && e.parameter && e.parameter.line;
+  const includeLine = lineParam === "1" || lineParam === "only";
+  const includePoints = lineParam !== "only";
+
+  if (!sheetName || ALLOWED_SHEETS.indexOf(sheetName) === -1) {
+    return ContentService.createTextOutput(
+      "Missing or unknown ?sheet= parameter. Allowed values: " + ALLOWED_SHEETS.join(", ")
+    ).setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  return getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints);
+}
+
+// GeoJSON generator for uMap, for any of the allowed sheet tabs.
+// - latestOnly: only the most recent valid point is included.
+// - excludeLatest: every point EXCEPT the most recent one is included
+//   (ignored if latestOnly is also set, since latestOnly is more
+//   specific and wins).
+// - includeLine: adds a LineString Feature connecting all points, in
+//   order, as the ship's route (ignored together with latestOnly, since
+//   a line needs more than one point).
+// - includePoints: whether the individual Point Features are included
+//   at all (false when ?line=only is requested).
+function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  const data = sheet.getDataRange().getValues();
+  const points = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const lat = parseFloat(row[0]);
+    const lon = parseFloat(row[1]);
+    const time = row[2];
+
+    if (!isNaN(lat) && !isNaN(lon)) {
+      points.push({ lat: lat, lon: lon, time: time });
+    }
+  }
+
+  let pointsToUse = points;
+  if (latestOnly) {
+    pointsToUse = points.slice(-1);
+  } else if (excludeLatest) {
+    pointsToUse = points.slice(0, -1);
+  }
+  const features = [];
+
+  if (includePoints) {
+    pointsToUse.forEach(function (p) {
+      features.push({
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [p.lon, p.lat]
+        },
+        "properties": {
+          "time": p.time
+        }
+      });
+    });
+  }
+
+  if (includeLine && !latestOnly && pointsToUse.length > 1) {
+    features.push({
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": pointsToUse.map(function (p) { return [p.lon, p.lat]; })
+      },
+      "properties": {}
+    });
+  }
+
+  const geojson = {
+    "type": "FeatureCollection",
+    "features": features
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(geojson))
+                       .setMimeType(ContentService.MimeType.JSON);
+}

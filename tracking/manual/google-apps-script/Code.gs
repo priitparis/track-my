@@ -1,11 +1,6 @@
-const SHEET_NAME = "location"; // Veendu, et lehe nimi Google Sheetsis on "location"
+const SHEET_NAME = "Location"; // Veendu, et lehe nimi Google Sheetsis on "Location"
 
 function doGet(e) {
-  // Kui uMap küsib GeoJSON andmeid (?format=geojson)
-  if (e && e.parameter && e.parameter.format === "geojson") {
-    return getGeoJSON();
-  }
-  
   // Serveerib HTML-lehte
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Saada asukoht')
@@ -28,39 +23,4 @@ function saveData(data) {
   } catch (error) {
     return { status: "error", message: error.toString() };
   }
-}
-
-// uMapi GeoJSON generaator
-function getGeoJSON() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  const data = sheet.getDataRange().getValues();
-  const features = [];
-  
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const lat = parseFloat(row[0]);
-    const lon = parseFloat(row[1]);
-    const time = row[2];
-    
-    if (!isNaN(lat) && !isNaN(lon)) {
-      features.push({
-        "type": "Feature",
-        "geometry": {
-          "type": "Point",
-          "coordinates": [lon, lat]
-        },
-        "properties": {
-          "time": time
-        }
-      });
-    }
-  }
-  
-  const geojson = {
-    "type": "FeatureCollection",
-    "features": features
-  };
-  
-  return ContentService.createTextOutput(JSON.stringify(geojson))
-                       .setMimeType(ContentService.MimeType.JSON);
 }

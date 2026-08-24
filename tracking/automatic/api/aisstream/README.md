@@ -3,26 +3,32 @@
 Automatic ship tracking via AISStream.io — polls a ship's live AIS position
 by MMSI on a schedule, no manual action required.
 
+This is the **secondary/backup** automatic method. See
+[../../scraper/myshiptracking/](../../scraper/myshiptracking/) for the
+primary method (faster updates, more reliable coverage found so far),
+which is why this one runs at a lower frequency — see "Actions minutes
+budget" below.
+
 ## Architecture
 
 - **Data source**: [AISStream.io](https://aisstream.io/) — a free
   real-time AIS WebSocket API.
-- **Trigger**: GitHub Actions, scheduled (cron, hourly) and manual
-  (`workflow_dispatch`).
+- **Trigger**: GitHub Actions, scheduled (cron, every 3 hours) and
+  manual (`workflow_dispatch`).
 - **Runtime**: [fetch_position.py](fetch_position.py), a short-lived
   Python script (waits up to `CONNECT_TIMEOUT_SECONDS`, 120s by default),
   run fresh on every scheduled tick — no persistent process.
 - **Database**: the same spreadsheet as the
-  [manual method](../../manual/google-apps-script/) (the manual method
-  writes to its `location` tab), but a **separate tab** (`Auto`) with the
+  [manual method](../../../manual/google-apps-script/) (the manual method
+  writes to its `Location` tab), but a **separate tab** (`Auto`) with the
   same `Lat` / `Lon` / `Time` column convention, so manual and automatic
   points can be styled differently later (e.g. different map
   layers/colors).
-- **Map feed**: a separate, read-only Apps Script web app
-  ([google-apps-script/](google-apps-script/)) serves the `Auto` tab as
-  GeoJSON for a uMap layer — the same role the manual method's
-  `getGeoJSON()` plays for its own `location` tab, kept as its own
-  deployment so the two tracking methods stay independent end-to-end.
+- **Map feed**: the [shared GeoJSON endpoint](../../../google-apps-script/)
+  serves the `Auto` tab as GeoJSON for a uMap layer (via
+  `?sheet=Auto`) — one Apps Script project shared by every tracking
+  method's read side, while each method keeps writing to its own tab
+  independently.
 
 ## Files
 
@@ -40,12 +46,9 @@ by MMSI on a schedule, no manual action required.
   configured MMSI, and prints the first message received, then exits.
   Useful for checking `AISSTREAM_API_KEY` and `SHIP_MMSI` are correct
   without writing anything to the sheet.
-- [google-apps-script/](google-apps-script/) — a separate, read-only Apps
-  Script project that serves the `Auto` tab as GeoJSON for a map layer.
-  See its own README for setup.
 
 The GitHub Actions workflow itself lives at the repo root,
-[.github/workflows/aisstream-tracker.yml](../../../.github/workflows/aisstream-tracker.yml),
+[.github/workflows/aisstream-tracker.yml](../../../../.github/workflows/aisstream-tracker.yml),
 not in this directory — GitHub only discovers workflows under
 `.github/workflows/` at the repo root, so it can't be colocated here.
 
@@ -57,11 +60,11 @@ not in this directory — GitHub only discovers workflows under
 3. Create a Google Cloud service account, enable the Google Sheets API for
    its project, and download its JSON key.
 4. Share the spreadsheet (the same one the
-   [manual method](../../manual/google-apps-script/) uses) with the
+   [manual method](../../../manual/google-apps-script/) uses) with the
    service account's `...@...iam.gserviceaccount.com` email (Editor
    access), the same way you'd share it with any collaborator.
 5. Add an `Auto` tab to that spreadsheet, with a header row
-   `Lat | Lon | Time` matching the `location` tab.
+   `Lat | Lon | Time` matching the `Location` tab.
 6. In the GitHub repo, add these secrets under Settings → Secrets and
    variables → Actions: `AISSTREAM_API_KEY`, `SHIP_MMSI`, `GCP_SA_KEY`
    (paste the full downloaded JSON key file's content as-is — the
@@ -74,27 +77,33 @@ not in this directory — GitHub only discovers workflows under
    (`workflow_dispatch`) to confirm a row appears in `Auto` before
    relying on the cron schedule.
 8. (Optional, for map display) Set up the
-   [google-apps-script/](google-apps-script/) GeoJSON endpoint and point
-   a uMap layer at it — see that directory's README for deployment
+   [shared GeoJSON endpoint](../../../google-apps-script/) once (it
+   serves every tracking method) and point a uMap layer at its Web App
+   URL with `?sheet=Auto` — see that project's README for deployment
    steps.
 
 ### Actions minutes budget
 
 On a private GitHub repo, the free tier includes 2,000 Actions minutes
-per month (public repos are unlimited). GitHub also caps any single job
-at 6 hours regardless of your own timeout, so a very long
+per month (public repos are unlimited), **shared** across every workflow
+in the repo — including
+[scraper/myshiptracking](../../scraper/myshiptracking/)'s. GitHub also caps any
+single job at 6 hours regardless of your own timeout, so a very long
 `CONNECT_TIMEOUT_SECONDS` doesn't buy unlimited waiting — it just spends
 the same budget on fewer, longer attempts instead of more, shorter ones.
 
 A run's cost is roughly `CONNECT_TIMEOUT_SECONDS` plus ~25s of setup
 overhead (checkout, Python install), *every time*, since a run that
 never receives a PositionReport still waits out the full timeout. The
-defaults here (hourly cron, 120s timeout) cost at most
-`720 runs × 145s ≈ 1,740 minutes/month` in the worst case (no position
-ever received), leaving some headroom under the 2,000 minute cap. If you
-change the interval or timeout, recompute this — e.g. a 15-minute
-interval with the same 120s timeout would cost up to ~3,480 min/month,
-well over the free tier.
+defaults here (every 3 hours, 120s timeout) cost at most
+`240 runs × 145s ≈ 580 minutes/month` in the worst case (no position
+ever received). Combined with the scraper method's worst case (~660
+min/month at its defaults), the total is about 1,240 min/month — leaving
+good headroom under the shared 2,000 minute cap. If you change either
+method's interval or timeout, recompute both together, not just the one
+you're editing — see
+[scraper/myshiptracking/README.md](../../scraper/myshiptracking/README.md#actions-minutes-budget)
+for its side of the calculation.
 
 ### Local testing (optional)
 
@@ -102,7 +111,7 @@ Use a Python virtual environment so dependencies stay isolated from the
 system Python:
 
 ```bash
-cd tracking/automatic/aisstream
+cd tracking/automatic/api/aisstream
 python3 -m venv aisstream-venv
 source aisstream-venv/bin/activate     # Windows: aisstream-venv\Scripts\activate
 pip install -r requirements.txt
@@ -137,7 +146,7 @@ python fetch_position.py      # loads .env automatically (run from this director
   community network of land-based receivers (~200km range each), so its
   coverage can differ from aggregator sites that also use satellite AIS.
 - GitHub Actions cron schedules are not exact — runs can be delayed under
-  load, so the hourly interval is approximate.
+  load, so the 3-hour interval is approximate.
 - Each run opens a fresh WebSocket connection rather than keeping one
   open continuously; this matches how GitHub Actions jobs work and keeps
   the setup serverless.
