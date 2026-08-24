@@ -1,7 +1,7 @@
 const SPREADSHEET_ID = "<your Google Sheet ID>"; // from its URL: /spreadsheets/d/<THIS_PART>/edit
 
 // Sheet tabs this endpoint is allowed to serve, keyed by the ?sheet= value.
-const ALLOWED_SHEETS = ["Location", "Auto", "Scraper"];
+const ALLOWED_SHEETS = ["Location", "Auto", "Scraper", "Events"];
 
 // uMap-recognized style property, applied to the route LineString so it
 // renders dashed instead of solid by default.
@@ -39,6 +39,13 @@ function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePo
   const data = sheet.getDataRange().getValues();
   const points = [];
 
+  // Columns beyond Lat/Lon/Time vary per sheet (e.g. Events has Event/
+  // Port/Country/Speed/Course, Scraper has speed/course/weather/trip
+  // fields) — read the header row so any extra column becomes a GeoJSON
+  // property automatically, by its own header name, instead of relying
+  // on fixed column positions that would only match one sheet's layout.
+  const headers = data.length > 0 ? data[0] : [];
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const lat = parseFloat(row[0]);
@@ -46,7 +53,14 @@ function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePo
     const time = row[2];
 
     if (!isNaN(lat) && !isNaN(lon)) {
-      points.push({ lat: lat, lon: lon, time: time });
+      const extra = {};
+      for (let c = 3; c < row.length; c++) {
+        const header = headers[c];
+        if (header && row[c] !== "" && row[c] !== undefined && row[c] !== null) {
+          extra[header] = row[c];
+        }
+      }
+      points.push({ lat: lat, lon: lon, time: time, extra: extra });
     }
   }
 
@@ -60,15 +74,18 @@ function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePo
 
   if (includePoints) {
     pointsToUse.forEach(function (p) {
+      const properties = { "time": p.time };
+      for (const key in p.extra) {
+        properties[key] = p.extra[key];
+      }
+
       features.push({
         "type": "Feature",
         "geometry": {
           "type": "Point",
           "coordinates": [p.lon, p.lat]
         },
-        "properties": {
-          "time": p.time
-        }
+        "properties": properties
       });
     });
   }

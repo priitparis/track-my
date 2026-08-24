@@ -11,8 +11,13 @@ the same pattern as [../manual/](../manual/).
 
 - [scraper/myshiptracking/](scraper/myshiptracking/) — primary method.
   Scrapes the ship's MyShipTracking.com vessel page for its position
-  every 30 minutes.
+  hourly.
+- [scraper/myshiptracking-events/](scraper/myshiptracking-events/) —
+  scrapes MyShipTracking.com's separate event log (port arrivals/
+  departures, start/stop moving) daily, appending only events not
+  already recorded.
 - [api/aisstream/](api/aisstream/) — secondary/backup method. Polls
   AISStream.io's AIS WebSocket API for the ship's position every 3
   hours (lower frequency, since it shares the same GitHub Actions
-  minutes budget as the scraper — see each method's README for details).
+  minutes budget as the other methods — see each method's README for
+  details).

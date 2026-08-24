@@ -4,5 +4,7 @@ __pycache__/
 aisstream-venv/
 scraper-venv/
 history-venv/
+events-venv/
 gcp-service-account.json
 *.csv
+umap_backup*.json
