@@ -1,0 +1,35 @@
+name: AISStream ship tracker
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  fetch-position:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r tracking/automatic/aisstream/requirements.txt
+
+      - name: Write service account key to a temp file
+        run: echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-service-account.json"
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Fetch AIS position and write to sheet
+        env:
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+          SHIP_MMSI: ${{ secrets.SHIP_MMSI }}
+          GCP_SA_KEY_PATH: ${{ runner.temp }}/gcp-service-account.json
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_TAB: Auto
+          CONNECT_TIMEOUT_SECONDS: "120"
+        run: python tracking/automatic/aisstream/fetch_position.py

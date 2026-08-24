@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <title>Saada asukoht</title>
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Asukoht">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/color/180/000000/filled-sent.png">
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f4f4f9;
+      padding: 20px;
+    }
+    .card {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      text-align: center;
+      max-width: 380px;
+      width: 100%;
+    }
+    h1 { margin-top: 0; font-size: 22px; color: #222; }
+    p { color: #666; font-size: 14px; margin-bottom: 25px; line-height: 1.4; }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 14px;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 10px rgba(0,123,255,0.3);
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+    button:disabled { background-color: #cccccc; box-shadow: none; cursor: not-allowed; }
+    #status { margin-top: 20px; font-size: 14px; font-weight: 600; min-height: 20px; }
+    .success { color: #28a745; }
+    .error { color: #dc3545; }
+    .info { color: #007bff; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>📍 Laevareisi asukoht</h1>
+    <p>Vajuta nuppu, et edastada oma praegused GPS-koordinaadid kaardile.</p>
+    
+    <button id="sendBtn" onclick="sendLocation()">Saada minu asukoht</button>
+    
+    <div id="status"></div>
+  </div>
+
+  <script>
+    function sendLocation() {
+      const btn = document.getElementById("sendBtn");
+      const status = document.getElementById("status");
+
+      if (!navigator.geolocation) {
+        status.className = "error";
+        status.innerText = "Sinu brauser ei toeta GPS-i.";
+        return;
+      }
+
+      btn.disabled = true;
+      status.className = "info";
+      status.innerText = "Tuvastan GPS asukohta...";
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          status.innerText = "Salvestan kaardile...";
+
+          const payload = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+            time: new Date().toISOString()
+          };
+
+          // Kasutame Apps Scripti sisest funktsiooni 'saveData' HTTP fetchi asemel!
+          google.script.run
+            .withSuccessHandler((response) => {
+              btn.disabled = false;
+              if (response && response.status === "success") {
+                status.className = "success";
+                status.innerText = "✓ Asukoht edukalt saadetud!";
+              } else {
+                status.className = "error";
+                status.innerText = "Viga: " + (response ? response.message : "Tundmatu viga");
+              }
+            })
+            .withFailureHandler((err) => {
+              btn.disabled = false;
+              status.className = "error";
+              status.innerText = "Viga serveriga ühendumisel: " + err.message;
+            })
+            .saveData(payload);
+        },
+        (error) => {
+          btn.disabled = false;
+          status.className = "error";
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              status.innerText = "GPS-i luba tagasi lükatud.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              status.innerText = "Asukoht pole kättesaadav.";
+              break;
+            case error.TIMEOUT:
+              status.innerText = "GPS-i päring aegus.";
+              break;
+            default:
+              status.innerText = "Tundmatu GPS viga.";
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    }
+  </script>
+
+</body>
+</html>
