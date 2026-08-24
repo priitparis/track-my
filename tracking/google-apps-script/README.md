@@ -26,7 +26,10 @@ Optional parameters combine with `?sheet=`:
   line together. Use `&line=only` instead to get *just* the line,
   without the individual points (e.g. `?sheet=Auto&line=only`). A line
   needs at least two points, so `&line=` has no effect when combined
-  with `&latest=1`.
+  with `&latest=1`. The line's `Feature.properties` includes
+  `dashArray` (set via `LINE_DASH_ARRAY` in [Code.gs](Code.gs), default
+  `"5,5"`) — a style property uMap recognizes to render the route dashed
+  instead of solid, without any per-layer styling needed in uMap itself.
 
 This replaces having a separate GeoJSON endpoint per automatic method;
 the manual method's own Apps Script project still handles its own

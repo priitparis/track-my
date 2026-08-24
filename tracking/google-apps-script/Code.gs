@@ -3,6 +3,10 @@ const SPREADSHEET_ID = "<your Google Sheet ID>"; // from its URL: /spreadsheets/
 // Sheet tabs this endpoint is allowed to serve, keyed by the ?sheet= value.
 const ALLOWED_SHEETS = ["Location", "Auto", "Scraper"];
 
+// uMap-recognized style property, applied to the route LineString so it
+// renders dashed instead of solid by default.
+const LINE_DASH_ARRAY = "5,5";
+
 function doGet(e) {
   const sheetName = e && e.parameter && e.parameter.sheet;
   const latestOnly = !!(e && e.parameter && e.parameter.latest);
@@ -76,7 +80,9 @@ function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePo
         "type": "LineString",
         "coordinates": pointsToUse.map(function (p) { return [p.lon, p.lat]; })
       },
-      "properties": {}
+      "properties": {
+        "dashArray": LINE_DASH_ARRAY
+      }
     });
   }
 
