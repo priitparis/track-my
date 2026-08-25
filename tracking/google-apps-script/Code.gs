@@ -1,7 +1,7 @@
 const SPREADSHEET_ID = "<your Google Sheet ID>"; // from its URL: /spreadsheets/d/<THIS_PART>/edit
 
 // Sheet tabs this endpoint is allowed to serve, keyed by the ?sheet= value.
-const ALLOWED_SHEETS = ["Location", "Auto", "Scraper", "Events"];
+const ALLOWED_SHEETS = ["Location", "Auto", "Scraper", "Events", "Blog"];
 
 // uMap-recognized style property, applied to the route LineString so it
 // renders dashed instead of solid by default.
@@ -14,6 +14,7 @@ function doGet(e) {
   const lineParam = e && e.parameter && e.parameter.line;
   const includeLine = lineParam === "1" || lineParam === "only";
   const includePoints = lineParam !== "only";
+  const groupFilter = e && e.parameter && e.parameter.group;
 
   if (!sheetName || ALLOWED_SHEETS.indexOf(sheetName) === -1) {
     return ContentService.createTextOutput(
@@ -21,7 +22,7 @@ function doGet(e) {
     ).setMimeType(ContentService.MimeType.TEXT);
   }
 
-  return getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints);
+  return getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints, groupFilter);
 }
 
 // GeoJSON generator for uMap, for any of the allowed sheet tabs.
@@ -34,7 +35,11 @@ function doGet(e) {
 //   a line needs more than one point).
 // - includePoints: whether the individual Point Features are included
 //   at all (false when ?line=only is requested).
-function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints) {
+// - groupFilter: if set, only points whose "group_id" column (only
+//   present on some sheets, e.g. Blog) matches this value are included —
+//   lets one sheet hold multiple trips/voyages and serve just one at a
+//   time via ?group=.
+function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePoints, groupFilter) {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
   const data = sheet.getDataRange().getValues();
   const points = [];
@@ -45,12 +50,17 @@ function getGeoJSON(sheetName, latestOnly, excludeLatest, includeLine, includePo
   // property automatically, by its own header name, instead of relying
   // on fixed column positions that would only match one sheet's layout.
   const headers = data.length > 0 ? data[0] : [];
+  const groupColumn = headers.indexOf("group_id");
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const lat = parseFloat(row[0]);
     const lon = parseFloat(row[1]);
     const time = row[2];
+
+    if (groupFilter && groupColumn !== -1 && String(row[groupColumn]) !== String(groupFilter)) {
+      continue;
+    }
 
     if (!isNaN(lat) && !isNaN(lon)) {
       const extra = {};

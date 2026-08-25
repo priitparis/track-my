@@ -34,15 +34,14 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
 
-EVENT_TYPES = [
-    "PORT ARRIVAL",
-    "PORT DEPARTURE",
-    "START Moving",
-    "STOP Moving",
-    "IN Coverage",
-    "OUT of Coverage",
-]
-EVENT_TYPE_PATTERN = re.compile("|".join(re.escape(t) for t in EVENT_TYPES))
+# Event type is read directly from the label following the row's <i>
+# icon (e.g. "PORT ARRIVAL", "Change Sea Area", "Detected in Sea") rather
+# than matched against a fixed list — MyShipTracking has added new event
+# types over time (e.g. "Change Sea Area" wasn't present when this was
+# first written), and a fixed list silently drops any row whose type
+# isn't in it, which previously caused whole rows — including the ship's
+# most recent event — to go missing.
+EVENT_TYPE_PATTERN = re.compile(r'<i class="fa [^"]*"[^>]*></i>\s*([A-Za-z ]+?)\s*</td>', re.DOTALL)
 
 DATETIME_PATTERN = re.compile(r'<td>(\d{4}-\d{2}-\d{2}) <b>(\d{2}:\d{2})</b></td>')
 LATLON_PATTERN = re.compile(r'<div class="area_txt_1lines">([\d.\-]+) / ([\d.\-]+)</div>')
@@ -93,7 +92,7 @@ def parse_events(html):
         events.append({
             "date": dt_match.group(1),
             "time": dt_match.group(2),
-            "event": event_match.group(0),
+            "event": event_match.group(1).strip(),
             "port": port_match.group(2).strip() if port_match else "",
             "country": port_match.group(1).strip() if port_match else "",
             "lat": latlon_match.group(1),

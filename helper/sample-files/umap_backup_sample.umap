@@ -1,0 +1,372 @@
+{
+    "type": "umap",
+    "geometry":
+    {
+        "type": "Point",
+        "coordinates":
+        [
+            4.0,
+            54.0
+        ]
+    },
+    "properties":
+    {
+        "ttl":
+        {
+            "300": "5 min",
+            "3600": "1 hour",
+            "86400": "1 day"
+        },
+        "name": "Example Trip",
+        "zoom": 5,
+        "center":
+        [
+            4.0,
+            54.0
+        ],
+        "fields":
+        [],
+        "overlay":
+        {},
+        "slideshow":
+        {},
+        "tilelayer":
+        {},
+        "limitBounds":
+        {},
+        "zoomControl": true,
+        "fullscreenControl": true
+    },
+    "uri": "",
+    "layers":
+    [
+        {
+            "layers":
+            [
+                {
+                    "type": "FeatureCollection",
+                    "features":
+                    [],
+                    "properties":
+                    {
+                        "name": "Auto-Substack",
+                        "fields":
+                        [
+                            {
+                                "key": "time",
+                                "type": "String"
+                            },
+                            {
+                                "key": "name",
+                                "type": "String"
+                            },
+                            {
+                                "key": "description",
+                                "type": "Text"
+                            },
+                            {
+                                "key": "post_title",
+                                "type": "String"
+                            },
+                            {
+                                "key": "post_date",
+                                "type": "String"
+                            },
+                            {
+                                "key": "post_url",
+                                "type": "String"
+                            },
+                            {
+                                "key": "group",
+                                "type": "String"
+                            },
+                            {
+                                "key": "group_id",
+                                "type": "String"
+                            }
+                        ],
+                        "browsable": true,
+                        "inCaption": true,
+                        "remoteData":
+                        {
+                            "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?sheet=Blog&group=1",
+                            "format": "geojson"
+                        },
+                        "displayOnLoad": true,
+                        "popupContentTemplate": "# {name}\n\n{description}\n\n## Blogi\n[[{post_url}]]"
+                    },
+                    "rank": 0
+                }
+            ],
+            "type": "FeatureCollection",
+            "features":
+            [],
+            "properties":
+            {
+                "name": "Substack",
+                "fields":
+                [],
+                "browsable": true,
+                "inCaption": true,
+                "remoteData":
+                {},
+                "displayOnLoad": true
+            },
+            "rank": 3
+        },
+        {
+            "layers":
+            [
+                {
+                    "type": "FeatureCollection",
+                    "features":
+                    [],
+                    "properties":
+                    {
+                        "fill": false,
+                        "name": "Scraper (peamine) — marsruut",
+                        "color": "#d93025",
+                        "fields":
+                        [
+                            {
+                                "key": "time",
+                                "type": "String"
+                            },
+                            {
+                                "key": "dashArray",
+                                "type": "String"
+                            }
+                        ],
+                        "stroke": true,
+                        "iconUrl": "/uploads/pictogram/circle.svg",
+                        "opacity": 0.8,
+                        "iconSize": 16,
+                        "browsable": true,
+                        "dashArray": "5,5",
+                        "iconClass": "Raw",
+                        "inCaption": true,
+                        "remoteData":
+                        {
+                            "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?sheet=Scraper&line=only",
+                            "format": "geojson"
+                        },
+                        "description": "Scraper (peamine) — marsruut",
+                        "displayOnLoad": true
+                    },
+                    "rank": 0
+                },
+                {
+                    "type": "FeatureCollection",
+                    "features":
+                    [],
+                    "properties":
+                    {
+                        "name": "Scraper (peamine) — viimane asukoht",
+                        "color": "#d93025",
+                        "fields":
+                        [
+                            {
+                                "key": "speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "course",
+                                "type": "String"
+                            },
+                            {
+                                "key": "area",
+                                "type": "String"
+                            },
+                            {
+                                "key": "status",
+                                "type": "String"
+                            },
+                            {
+                                "key": "flag",
+                                "type": "String"
+                            },
+                            {
+                                "key": "call_sign",
+                                "type": "String"
+                            },
+                            {
+                                "key": "size",
+                                "type": "String"
+                            },
+                            {
+                                "key": "distance_travelled",
+                                "type": "String"
+                            },
+                            {
+                                "key": "avg_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "max_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "time_travelled",
+                                "type": "String"
+                            },
+                            {
+                                "key": "temperature",
+                                "type": "String"
+                            },
+                            {
+                                "key": "wind_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "wind_direction",
+                                "type": "String"
+                            },
+                            {
+                                "key": "pressure",
+                                "type": "String"
+                            },
+                            {
+                                "key": "humidity",
+                                "type": "String"
+                            },
+                            {
+                                "key": "time",
+                                "type": "String"
+                            }
+                        ],
+                        "iconUrl": "https://api.iconify.design/material-symbols:sailing.svg?color=%23d93025",
+                        "iconSize": 36,
+                        "labelKey": "Time {time} ",
+                        "browsable": true,
+                        "iconClass": "Raw",
+                        "inCaption": true,
+                        "showLabel": null,
+                        "remoteData":
+                        {
+                            "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?sheet=Scraper&latest=1",
+                            "format": "geojson"
+                        },
+                        "description": "Scraper (peamine) — viimane asukoht",
+                        "displayOnLoad": true,
+                        "labelInteractive": true,
+                        "popupContentTemplate": "# Data\n**Time**: {time}\n**Latitude**: {lat}\n**Longitude**: {lon}\n**Speed**: {speed}\n**Course**: {course}\n**Area**: {area}\n**Status**: {status}\n**Draught**: {draught}\n**IMO**: {imo}\n**Flag**: {flag}\n**Call sign**: {call_sign}\n**Size**: {size}\n**GT**: {gt}\n**DWT**: {dwt}\n**Build**: {build}\n**Distance travelled**: {distance_travelled}\n**Remaining distance**: {remaining_distance}\n**Average speed**: {avg_speed}\n**Max speed**: {max_speed}\n**Time travelled**: {time_travelled}\n**Temperature**: {temperature}\n**Wind speed**: {wind_speed}\n**Wind direction**: {wind_direction}\n**Pressure**: {pressure}\n**Humidity**: {humidity}\n**Cloud coverage**: {cloud_coverage}"
+                    },
+                    "rank": 1
+                },
+                {
+                    "type": "FeatureCollection",
+                    "features":
+                    [],
+                    "properties":
+                    {
+                        "name": "Scraper (peamine) — ajalugu",
+                        "color": "#d93025",
+                        "fields":
+                        [
+                            {
+                                "key": "speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "course",
+                                "type": "String"
+                            },
+                            {
+                                "key": "area",
+                                "type": "String"
+                            },
+                            {
+                                "key": "status",
+                                "type": "String"
+                            },
+                            {
+                                "key": "flag",
+                                "type": "String"
+                            },
+                            {
+                                "key": "call_sign",
+                                "type": "String"
+                            },
+                            {
+                                "key": "size",
+                                "type": "String"
+                            },
+                            {
+                                "key": "distance_travelled",
+                                "type": "String"
+                            },
+                            {
+                                "key": "avg_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "max_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "time_travelled",
+                                "type": "String"
+                            },
+                            {
+                                "key": "temperature",
+                                "type": "String"
+                            },
+                            {
+                                "key": "wind_speed",
+                                "type": "String"
+                            },
+                            {
+                                "key": "wind_direction",
+                                "type": "String"
+                            },
+                            {
+                                "key": "pressure",
+                                "type": "String"
+                            },
+                            {
+                                "key": "humidity",
+                                "type": "String"
+                            },
+                            {
+                                "key": "time",
+                                "type": "String"
+                            }
+                        ],
+                        "iconUrl": "https://api.iconify.design/material-symbols:circle.svg?color=%23d93025",
+                        "iconSize": 12,
+                        "labelKey": "Time {time} ",
+                        "browsable": true,
+                        "iconClass": "Raw",
+                        "inCaption": true,
+                        "showLabel": null,
+                        "remoteData":
+                        {
+                            "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?sheet=Scraper&exclude_latest=1",
+                            "format": "geojson"
+                        },
+                        "description": "Scraper (peamine) — ajalugu",
+                        "displayOnLoad": true,
+                        "labelInteractive": true,
+                        "popupContentTemplate": "# Data\n**Time**: {time}\n**Latitude**: {lat}\n**Longitude**: {lon}\n**Speed**: {speed}\n**Course**: {course}\n**Area**: {area}\n**Status**: {status}\n**Draught**: {draught}\n**IMO**: {imo}\n**Flag**: {flag}\n**Call sign**: {call_sign}\n**Size**: {size}\n**GT**: {gt}\n**DWT**: {dwt}\n**Build**: {build}\n**Distance travelled**: {distance_travelled}\n**Remaining distance**: {remaining_distance}\n**Average speed**: {avg_speed}\n**Max speed**: {max_speed}\n**Time travelled**: {time_travelled}\n**Temperature**: {temperature}\n**Wind speed**: {wind_speed}\n**Wind direction**: {wind_direction}\n**Pressure**: {pressure}\n**Humidity**: {humidity}\n**Cloud coverage**: {cloud_coverage}"
+                    },
+                    "rank": 2
+                }
+            ],
+            "type": "FeatureCollection",
+            "features":
+            [],
+            "properties":
+            {
+                "name": "Scraper (peamine)",
+                "fields":
+                [],
+                "browsable": true,
+                "inCaption": true,
+                "remoteData":
+                {},
+                "displayOnLoad": true
+            },
+            "rank": 4
+        }
+    ]
+}

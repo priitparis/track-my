@@ -53,7 +53,10 @@ directly in Excel.
   Datalastic/MarineTraffic were judged too expensive for a one-off need).
 - This regex-scrapes the page's HTML structure, not a documented API —
   MyShipTracking could change it at any time without notice, silently
-  breaking extraction.
+  breaking extraction. The event type is read from whatever label
+  follows each row's icon, rather than matched against a fixed list — a
+  fixed list previously caused rows with newer event types (e.g. "Change
+  Sea Area", "Detected in Sea") to be silently dropped entirely.
 - Some rows (mostly `IN Coverage` / `OUT of Coverage`) don't have a
   speed or course in the source page; those fields are left blank
   rather than guessed.

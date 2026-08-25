@@ -9,6 +9,7 @@ pointing at the same Web App URL with a different `?sheet=` value:
 - `?sheet=Auto` — the [AISStream method](../automatic/api/aisstream/)'s tab
 - `?sheet=Scraper` — the [scraper method](../automatic/scraper/myshiptracking/)'s tab
 - `?sheet=Events` — the [event log scraper](../automatic/scraper/myshiptracking-events/)'s tab (each point's `properties` also includes `event`, `port`, `country`, `speed`, `course` when present, on top of the usual `time`)
+- `?sheet=Blog` — the [blog location extractor](../automatic/api/blog-locations/)'s tab (each point's `properties` also includes `name`, `description`, `post_title`, `post_date`, `post_url`, `group_id`)
 
 Optional parameters combine with `?sheet=`:
 
@@ -31,6 +32,11 @@ Optional parameters combine with `?sheet=`:
   `dashArray` (set via `LINE_DASH_ARRAY` in [Code.gs](Code.gs), default
   `"5,5"`) — a style property uMap recognizes to render the route dashed
   instead of solid, without any per-layer styling needed in uMap itself.
+- `&group=` — only include rows whose `group_id` column matches this
+  value — e.g. `?sheet=Blog&group=2`. Only meaningful for sheets that
+  have a `group_id` column (currently just `Blog`, since one blog can
+  cover more than one trip over time); on sheets without that column,
+  `&group=` has no effect.
 
 This replaces having a separate GeoJSON endpoint per automatic method;
 the manual method's own Apps Script project still handles its own
@@ -43,9 +49,10 @@ read-only and only serves data — it never writes any.
   `ALLOWED_SHEETS`, and returns that sheet tab as a GeoJSON
   `FeatureCollection` — trimmed to just the latest point with
   `?latest=1`, or with the latest point removed with
-  `?exclude_latest=1`, and/or including a route `LineString` with
-  `?line=1` (or `?line=only` for just the line). `SPREADSHEET_ID` at the
-  top must be filled in with the real spreadsheet ID before deploying.
+  `?exclude_latest=1`, optionally filtered to one `group_id` with
+  `?group=`, and/or including a route `LineString` with `?line=1` (or
+  `?line=only` for just the line). `SPREADSHEET_ID` at the top must be
+  filled in with the real spreadsheet ID before deploying.
 
 This is a documentation copy of code that runs in Google's environment,
 not a deploy source — to update the live version, edit the script

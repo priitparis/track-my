@@ -21,3 +21,7 @@ the same pattern as [../manual/](../manual/).
   hours (lower frequency, since it shares the same GitHub Actions
   minutes budget as the other methods — see each method's README for
   details).
+- [api/blog-locations/](api/blog-locations/) — a different kind of
+  method: doesn't track live position at all, instead uses an LLM
+  (Gemini) to extract the locations mentioned in the trip's own blog
+  posts (RSS feed), daily.

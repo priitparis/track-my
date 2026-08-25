@@ -1,0 +1,38 @@
+name: Blog location extractor
+
+on:
+  schedule:
+    - cron: "0 0 */7 * *"
+  workflow_dispatch: {}
+
+jobs:
+  fetch-locations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r tracking/automatic/api/blog-locations/requirements.txt
+
+      - name: Write service account key to a temp file
+        run: echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-service-account.json"
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Fetch new blog posts and extract locations
+        env:
+          BLOG_FEED_URL: ${{ secrets.BLOG_FEED_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GCP_SA_KEY_PATH: ${{ runner.temp }}/gcp-service-account.json
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_TAB: Blog
+          REQUEST_TIMEOUT_SECONDS: "30"
+          # Change this when starting a new trip — see the "Sheet columns"
+          # section in tracking/automatic/api/blog-locations/README.md.
+          GROUP_ID: "2"
+        run: python tracking/automatic/api/blog-locations/fetch_locations.py

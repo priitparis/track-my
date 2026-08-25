@@ -5,6 +5,10 @@ aisstream-venv/
 scraper-venv/
 history-venv/
 events-venv/
+blog-venv/
 gcp-service-account.json
 *.csv
 umap_backup*.json
+/*.xlsx
+/*.umap
+.~lock.*#

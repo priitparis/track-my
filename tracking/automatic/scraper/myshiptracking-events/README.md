@@ -107,7 +107,12 @@ python fetch_events.py        # loads .env automatically (run from this director
 
 - This regex-scrapes the event log's HTML table, not a documented
   public API — MyShipTracking could change its page structure at any
-  time without notice, silently breaking extraction.
+  time without notice, silently breaking extraction. The event type
+  itself is read from whatever label follows each row's icon, rather
+  than matched against a fixed list — a fixed list previously caused
+  whole rows (including the ship's most recent event) to be silently
+  dropped when MyShipTracking added event types (e.g. "Change Sea Area",
+  "Detected in Sea") that weren't in it.
 - MyShipTracking only serves roughly the last 3 weeks of event history
   for a vessel, regardless of how far back `LOOKBACK_DAYS` requests —
   there's no way to backfill further back than that from this source.
