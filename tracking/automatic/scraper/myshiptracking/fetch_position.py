@@ -166,11 +166,16 @@ def main():
         sys.exit(0)
 
     if result is None:
-        print(
+        # Unlike a stale-but-present position (e.g. the ship out of AIS
+        # coverage), finding no position pattern at all on the page means
+        # the page's HTML structure has likely changed underneath us —
+        # fail loudly (nonzero exit) so GitHub Actions marks the run
+        # failed and emails a notification, rather than silently
+        # skipping forever.
+        sys.exit(
             f"No position found on the vessel page for MMSI {cfg['mmsi']}; "
-            "the page structure may have changed. Skipping this run."
+            "the page structure may have changed."
         )
-        sys.exit(0)
 
     result["time"] = datetime.now(timezone.utc).isoformat()
     append_to_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], result)

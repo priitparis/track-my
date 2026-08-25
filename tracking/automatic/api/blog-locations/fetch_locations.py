@@ -175,8 +175,13 @@ def main():
         sys.exit(0)
 
     if not posts:
-        print("No posts found in the feed; skipping this run.")
-        sys.exit(0)
+        # A feed with literally zero parseable posts almost certainly
+        # means the RSS XML structure changed (e.g. content:encoded
+        # renamed or dropped) rather than the blog genuinely having no
+        # posts ever. Fail loudly so GitHub Actions marks the run failed
+        # and emails a notification — a post backlog of "all already
+        # processed" (handled below) is the normal, non-failing case.
+        sys.exit("No posts found in the feed; the feed's structure may have changed.")
 
     creds = Credentials.from_service_account_file(
         cfg["sa_key_path"],

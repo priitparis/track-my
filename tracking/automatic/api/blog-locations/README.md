@@ -125,6 +125,15 @@ python fetch_locations.py     # loads .env automatically (run from this director
 
 ## Known limitations
 
+- If the RSS feed is fetched successfully but zero posts can be parsed
+  out of it, the script exits with a nonzero code instead of skipping
+  silently — GitHub Actions marks that run failed and emails a
+  notification, since this almost always means the feed's XML structure
+  changed (e.g. `content:encoded` renamed or dropped) rather than the
+  blog genuinely having no posts. A backlog of "every post already
+  processed" (the normal steady-state case once history is caught up)
+  does not trigger this — only literally failing to parse any post at
+  all does.
 - Duplicate detection reads every existing row's `post_url` column
   (column 8) on every run, which is fine at this data volume but would
   need revisiting if the sheet grows very large.

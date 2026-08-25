@@ -175,7 +175,12 @@ together, not just the one you're editing.
   `fetch_position()` to succeed; every other field (speed, trip, weather,
   static vessel info) is best-effort and left blank if its `<th>` label
   isn't found on the page, so a partial page change degrades gracefully
-  rather than failing the whole run.
+  rather than failing the whole run. If the core position pattern itself
+  isn't found, though, the script exits with a nonzero code (rather than
+  skipping silently) — GitHub Actions marks that run failed and emails a
+  notification, since this almost always means the page's structure
+  changed, not that the ship is simply out of coverage (a stale-but-
+  present position would still match the pattern).
 - Static vessel-info fields (`imo`, `flag`, `call_sign`, `size`, `gt`,
   `dwt`, `build`) rarely change and are repeated on every row — this
   keeps the sheet's shape simple at the cost of redundant storage, which

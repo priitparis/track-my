@@ -180,8 +180,14 @@ def main():
         sys.exit(0)
 
     if not events:
-        print(f"No events found for MMSI {cfg['mmsi']}; skipping this run.")
-        sys.exit(0)
+        # A 30-day window with literally zero events (not even IN/OUT of
+        # Coverage) almost certainly means the page's row-parsing regexes
+        # no longer match — i.e. MyShipTracking changed its HTML — rather
+        # than the ship genuinely having no AIS activity at all in a
+        # month. Fail loudly so GitHub Actions marks the run failed and
+        # emails a notification.
+        sys.exit(f"No events found for MMSI {cfg['mmsi']} in the last {LOOKBACK_DAYS} days; "
+                  "the page structure may have changed.")
 
     added = append_new_events(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], events)
     print(f"Fetched {len(events)} events, added {added} new row(s) to '{cfg['tab']}'.")

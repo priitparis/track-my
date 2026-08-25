@@ -112,7 +112,13 @@ python fetch_events.py        # loads .env automatically (run from this director
   than matched against a fixed list — a fixed list previously caused
   whole rows (including the ship's most recent event) to be silently
   dropped when MyShipTracking added event types (e.g. "Change Sea Area",
-  "Detected in Sea") that weren't in it.
+  "Detected in Sea") that weren't in it. If a run parses *zero* events
+  from the whole lookback window, the script exits with a nonzero code
+  instead of skipping silently — GitHub Actions marks that run failed
+  and emails a notification, since a real ship going a full
+  `LOOKBACK_DAYS` window with no AIS activity at all (not even a single
+  coverage change) is far less likely than the page's row structure
+  having changed.
 - MyShipTracking only serves roughly the last 3 weeks of event history
   for a vessel, regardless of how far back `LOOKBACK_DAYS` requests —
   there's no way to backfill further back than that from this source.
