@@ -145,6 +145,30 @@ SHEET_COLUMNS = [
     "temperature", "wind_speed", "wind_direction", "pressure", "humidity", "cloud_coverage",
 ]
 
+# Coordinates within this many degrees (~10m) of the last written row are
+# treated as the same position, to avoid piling up duplicate rows while
+# the ship is stationary (e.g. in port or at anchor) and AIS just repeats
+# its last known fix on every hourly run.
+SAME_POSITION_TOLERANCE_DEGREES = 0.0001
+
+
+def is_duplicate_position(sheet, lat, lon):
+    """Compares (lat, lon) against the last row currently in the sheet.
+    Returns False (not a duplicate) if the sheet has no data rows yet, or
+    if the last row's Lat/Lon can't be parsed as numbers."""
+    values = sheet.get_all_values()
+    if len(values) < 2:
+        return False
+    last_row = values[-1]
+    try:
+        last_lat, last_lon = float(last_row[0]), float(last_row[1])
+    except (IndexError, ValueError):
+        return False
+    return (
+        abs(lat - last_lat) <= SAME_POSITION_TOLERANCE_DEGREES
+        and abs(lon - last_lon) <= SAME_POSITION_TOLERANCE_DEGREES
+    )
+
 
 def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
     creds = Credentials.from_service_account_file(
@@ -153,7 +177,10 @@ def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
     )
     gc = gspread.authorize(creds)
     sheet = gc.open_by_key(sheet_id).worksheet(tab)
+    if is_duplicate_position(sheet, row_data["lat"], row_data["lon"]):
+        return False
     sheet.append_row([row_data[col] for col in SHEET_COLUMNS])
+    return True
 
 
 def main():
@@ -178,7 +205,13 @@ def main():
         )
 
     result["time"] = datetime.now(timezone.utc).isoformat()
-    append_to_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], result)
+    written = append_to_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], result)
+    if not written:
+        print(
+            f"Skipped MMSI {cfg['mmsi']}: position {result['lat']}, {result['lon']} "
+            "matches the last recorded row; ship appears stationary."
+        )
+        return
     print(
         f"Wrote position for MMSI {cfg['mmsi']}: {result['lat']}, {result['lon']} "
         f"at {result['time']} (speed={result['speed'] or '?'}, area={result['area'] or '?'})"

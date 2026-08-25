@@ -44,6 +44,9 @@ lower frequency.
   sheet tab.
 - [requirements.txt](requirements.txt) — Python dependencies
   (`requests`, `gspread`, `google-auth`, `python-dotenv`).
+- [test_fetch_position.py](test_fetch_position.py) — unit tests for the
+  duplicate-position guard (`pytest test_fetch_position.py`; requires
+  `pytest`, dev-only, not in requirements.txt).
 - [.env.example](.env.example) — documents the required environment
   variables, for local runs.
 - [gcp-service-account.json.example](gcp-service-account.json.example) —
@@ -81,6 +84,12 @@ temperature | wind_speed | wind_direction | pressure | humidity | cloud_coverage
 
 Any field the page shows as `---` (not available) is written as a blank
 cell, not the literal string `---`.
+
+Before appending, the script compares the new `(lat, lon)` against the
+sheet's last row; if both are within ~10m (0.0001°) of each other, the
+row is skipped rather than written — this avoids piling up duplicate
+rows while the ship is stationary (in port, at anchor) and the page
+keeps returning the same last-known AIS fix on every hourly run.
 
 # Data
 **Time**: {time}
