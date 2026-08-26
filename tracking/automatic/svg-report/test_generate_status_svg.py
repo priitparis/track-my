@@ -65,7 +65,7 @@ def test_render_svg_contains_key_values():
 
     assert "Sanuk" in svg
     assert "ES4371" in svg
-    assert "988.7 nm" in svg
+    assert "988.7 nm (1831.1 km)" in svg
     assert "STOP Moving - DEN HELDER - Netherlands" in svg
     assert svg.strip().startswith("<svg")
     assert svg.strip().endswith("</svg>")

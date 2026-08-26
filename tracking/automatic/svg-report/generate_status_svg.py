@@ -33,6 +33,10 @@ SHIP_TYPE = "Sailing yacht"
 SHIP_FLAG = "Estonia"
 SHIP_CALL_SIGN = "ES4371"
 
+# Used only to display the distance in km alongside its source nm value
+# (Scraper's own full_distance column stays nm-only).
+KM_PER_NM = 1.852
+
 
 def load_config():
     required = ["GCP_SA_KEY_PATH", "GOOGLE_SHEET_ID"]
@@ -154,7 +158,7 @@ def render_svg(status, width_key="normal", theme_key="dark"):
         ("label", "Speed / Course", label_size, False),
         ("value", f"{status['speed']} kn / {status['course']}°", value_size, False),
         ("label", "Total distance traveled", label_size, False),
-        ("value", f"{status['distance_nm']:.1f} nm", value_size, False),
+        ("value", f"{status['distance_nm']:.1f} nm ({status['distance_nm'] * KM_PER_NM:.1f} km)", value_size, False),
         ("label", "Last event", label_size, False),
         ("value", status["event_summary"], value_size, False),
     ]
