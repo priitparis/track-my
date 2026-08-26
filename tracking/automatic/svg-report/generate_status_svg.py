@@ -6,13 +6,17 @@ Actions job on a cron schedule; the workflow uploads the generated SVGs
 to a fixed GitHub release ("latest-status") so they can be embedded
 elsewhere (e.g. Substack) via a stable download URL.
 
+The total distance traveled is read directly from the Scraper tab's own
+"full_distance" column (computed and written by
+../scraper/myshiptracking/fetch_position.py on each of its runs) rather
+than recomputed here.
+
 Renders every combination of width (normal/compact) and background
 (dark/light/transparent) — six SVG files per run, listed in VARIANTS —
 plus a rasterized PNG counterpart of each (via cairosvg), for embedding
 contexts that don't support SVG.
 """
 
-import math
 import os
 import sys
 
@@ -29,20 +33,6 @@ SHIP_TYPE = "Sailing yacht"
 SHIP_FLAG = "Estonia"
 SHIP_CALL_SIGN = "ES4371"
 
-# One-time historical base distance, in nautical miles, covering the
-# part of the trip no single sheet tracks end-to-end: Blog rows 38-44
-# (Pärnu jahtklubi B-kai -> Visby sadam), then Events rows 2-57 (Visby
-# PORT DEPARTURE -> Den Helder STOP Moving), then the connecting leg
-# from Events' last point to the Scraper tab's own first row. See
-# README.md for the exact derivation. Computed 2026-08-26 from
-# Pallipere.xlsx. This is a frozen snapshot, not a live formula —
-# recompute and update it manually if those historical rows are ever
-# corrected/backfilled.
-BASE_DISTANCE_NM = 847.9773
-
-EARTH_RADIUS_KM = 6371.0088
-KM_PER_NM = 1.852
-
 
 def load_config():
     required = ["GCP_SA_KEY_PATH", "GOOGLE_SHEET_ID"]
@@ -58,28 +48,6 @@ def load_config():
     }
 
 
-# --- Distance --------------------------------------------------------------
-
-def haversine_nm(lat1, lon1, lat2, lon2):
-    """Great-circle distance between two (lat, lon) points, in nautical miles."""
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlmb = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
-    km = 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
-    return km / KM_PER_NM
-
-
-def total_distance_nm(scraper_positions):
-    """Sums Haversine distance across consecutive (lat, lon) pairs in the
-    Scraper tab's own rows, then adds the fixed historical base distance."""
-    live_nm = sum(
-        haversine_nm(a[0], a[1], b[0], b[1])
-        for a, b in zip(scraper_positions, scraper_positions[1:])
-    )
-    return BASE_DISTANCE_NM + live_nm
-
-
 # --- Sheet reading -----------------------------------------------------------
 
 def open_sheet(sa_key_path, sheet_id, tab):
@@ -91,13 +59,9 @@ def open_sheet(sa_key_path, sheet_id, tab):
     return gc.open_by_key(sheet_id).worksheet(tab)
 
 
-def read_scraper_positions(sheet):
-    """Returns ([(lat, lon), ...] in sheet order, latest row as a dict)."""
+def read_latest_scraper_row(sheet):
     records = sheet.get_all_records()
-    if not records:
-        return [], None
-    positions = [(float(r["Lat"]), float(r["Lon"])) for r in records]
-    return positions, records[-1]
+    return records[-1] if records else None
 
 
 def read_latest_event(sheet):
@@ -222,8 +186,8 @@ def render_svg(status, width_key="normal", theme_key="dark"):
     )
 
 
-def build_status(scraper_positions, latest_scraper_row, latest_event_row):
-    distance_nm = total_distance_nm(scraper_positions)
+def build_status(latest_scraper_row, latest_event_row):
+    distance_nm = float(latest_scraper_row["full_distance"])
     event_summary = "unknown"
     if latest_event_row:
         parts = [
@@ -255,14 +219,14 @@ def main():
     cfg = load_config()
 
     scraper_sheet = open_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["scraper_tab"])
-    scraper_positions, latest_scraper_row = read_scraper_positions(scraper_sheet)
+    latest_scraper_row = read_latest_scraper_row(scraper_sheet)
     if latest_scraper_row is None:
         sys.exit("Scraper tab has no data rows; nothing to render.")
 
     events_sheet = open_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["events_tab"])
     latest_event_row = read_latest_event(events_sheet)
 
-    status = build_status(scraper_positions, latest_scraper_row, latest_event_row)
+    status = build_status(latest_scraper_row, latest_event_row)
 
     os.makedirs(cfg["output_dir"], exist_ok=True)
     for width_key, theme_key in VARIANTS:

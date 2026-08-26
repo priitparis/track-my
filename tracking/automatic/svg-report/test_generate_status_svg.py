@@ -6,63 +6,42 @@ install separately: pip install pytest)
 """
 
 from generate_status_svg import (
-    BASE_DISTANCE_NM,
     THEMES,
     VARIANTS,
     WIDTHS,
     _wrap_text,
     build_status,
-    haversine_nm,
     output_filename,
     render_svg,
-    total_distance_nm,
 )
 
 
-def test_haversine_known_distance():
-    # Tallinn to Helsinki is approximately 44 nm (~82 km) in a straight line.
-    tallinn = (59.4370, 24.7536)
-    helsinki = (60.1699, 24.9384)
-    distance = haversine_nm(*tallinn, *helsinki)
-    assert 42 <= distance <= 46
-
-
-def test_haversine_zero_for_identical_points():
-    assert haversine_nm(52.0, 4.0, 52.0, 4.0) == 0
-
-
-def test_total_distance_adds_base_constant_to_live_sum():
-    points = [(52.0, 4.0), (52.01, 4.0)]
-    expected_live = haversine_nm(52.0, 4.0, 52.01, 4.0)
-    assert total_distance_nm(points) == BASE_DISTANCE_NM + expected_live
-
-
-def test_total_distance_with_single_point_is_just_base():
-    assert total_distance_nm([(52.0, 4.0)]) == BASE_DISTANCE_NM
-
-
 def test_build_status_uses_latest_rows():
-    scraper_positions = [(52.0, 4.0), (52.1, 4.1)]
     latest_scraper_row = {
         "Lat": "52.1",
         "Lon": "4.1",
         "Time": "2026-08-25T14:07:46+00:00",
         "speed": "5.2",
         "course": "270",
+        "full_distance": "988.7",
     }
     latest_event_row = {"Event": "STOP Moving", "Port": "DEN HELDER", "Country": "Netherlands"}
 
-    status = build_status(scraper_positions, latest_scraper_row, latest_event_row)
+    status = build_status(latest_scraper_row, latest_event_row)
 
     assert status["lat"] == 52.1
     assert status["lon"] == 4.1
+    assert status["distance_nm"] == 988.7
     assert status["event_summary"] == "STOP Moving - DEN HELDER - Netherlands"
     assert status["speed"] == "5.2"
 
 
 def test_build_status_handles_missing_event():
-    latest_scraper_row = {"Lat": "52.0", "Lon": "4.0", "Time": "t", "speed": "", "course": ""}
-    status = build_status([(52.0, 4.0)], latest_scraper_row, None)
+    latest_scraper_row = {
+        "Lat": "52.0", "Lon": "4.0", "Time": "t",
+        "speed": "", "course": "", "full_distance": "900.0",
+    }
+    status = build_status(latest_scraper_row, None)
     assert status["event_summary"] == "unknown"
 
 

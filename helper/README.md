@@ -13,3 +13,6 @@ workflow runs anything in this directory.
 - [myshiptracking-history/](myshiptracking-history/) — a script for a
   one-time export of a vessel's recent MyShipTracking.com event history
   to CSV, for manual review or import into Excel.
+- [backfill-full-distance/](backfill-full-distance/) — a script that
+  fills in the `Scraper` tab's `full_distance` column for rows written
+  before that column existed.

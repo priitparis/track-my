@@ -5,6 +5,7 @@ to the "Scraper" Google Sheet tab. Intended to run as a short-lived
 GitHub Actions job on a cron schedule.
 """
 
+import math
 import os
 import re
 import sys
@@ -16,6 +17,31 @@ from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
 
 load_dotenv()
+
+# One-time historical base distance, in nautical miles, covering the
+# part of the trip this sheet doesn't itself track: Blog rows 38-44
+# (Pärnu jahtklubi B-kai -> Visby sadam), then Events rows 2-57 (Visby
+# PORT DEPARTURE -> Den Helder STOP Moving), then the connecting leg
+# from Events' last point to this tab's own first row. See
+# ../../svg-report/README.md for the exact derivation. Computed
+# 2026-08-26 from Pallipere.xlsx. This is a frozen snapshot, not a live
+# formula — recompute and update it manually if those historical rows
+# are ever corrected/backfilled.
+BASE_DISTANCE_NM = 847.9773
+
+EARTH_RADIUS_KM = 6371.0088
+KM_PER_NM = 1.852
+
+
+def haversine_nm(lat1, lon1, lat2, lon2):
+    """Great-circle distance between two (lat, lon) points, in nautical miles."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    km = 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+    return km / KM_PER_NM
+
 
 PAGE_URL_TEMPLATE = "https://www.myshiptracking.com/vessels/mmsi-{mmsi}"
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "30"))
@@ -143,6 +169,7 @@ SHEET_COLUMNS = [
     "imo", "flag", "call_sign", "size", "gt", "dwt", "build",
     "distance_travelled", "remaining_distance", "avg_speed", "max_speed", "time_travelled",
     "temperature", "wind_speed", "wind_direction", "pressure", "humidity", "cloud_coverage",
+    "full_distance",
 ]
 
 # Coordinates within this many degrees (~10m) of the last written row are
@@ -152,22 +179,52 @@ SHEET_COLUMNS = [
 SAME_POSITION_TOLERANCE_DEGREES = 0.0001
 
 
-def is_duplicate_position(sheet, lat, lon):
-    """Compares (lat, lon) against the last row currently in the sheet.
-    Returns False (not a duplicate) if the sheet has no data rows yet, or
-    if the last row's Lat/Lon can't be parsed as numbers."""
-    values = sheet.get_all_values()
+def _last_row_lat_lon(values):
+    """Returns (lat, lon) of the sheet's last data row, or None if there
+    isn't one or its Lat/Lon can't be parsed as numbers."""
     if len(values) < 2:
-        return False
+        return None
     last_row = values[-1]
     try:
-        last_lat, last_lon = float(last_row[0]), float(last_row[1])
+        return float(last_row[0]), float(last_row[1])
     except (IndexError, ValueError):
+        return None
+
+
+def is_duplicate_position(values, lat, lon):
+    """Compares (lat, lon) against the last row currently in the sheet
+    (`values`, as returned by `sheet.get_all_values()`). Returns False
+    (not a duplicate) if the sheet has no data rows yet, or if the last
+    row's Lat/Lon can't be parsed as numbers."""
+    last = _last_row_lat_lon(values)
+    if last is None:
         return False
+    last_lat, last_lon = last
     return (
         abs(lat - last_lat) <= SAME_POSITION_TOLERANCE_DEGREES
         and abs(lon - last_lon) <= SAME_POSITION_TOLERANCE_DEGREES
     )
+
+
+def compute_full_distance(values, lat, lon):
+    """Cumulative distance-since-departure through this new (lat, lon)
+    point, in nautical miles: the historical base distance plus the
+    live Haversine sum across every row already in the sheet, plus the
+    final leg from the sheet's last row to this new point. If the sheet
+    has no data rows yet, this new point is the start of the live sum,
+    so the result is just the base distance."""
+    last = _last_row_lat_lon(values)
+    if last is None:
+        return BASE_DISTANCE_NM
+    last_lat, last_lon = last
+    prior_full_distance = None
+    if len(values) >= 2:
+        try:
+            prior_full_distance = float(values[-1][SHEET_COLUMNS.index("full_distance")])
+        except (IndexError, ValueError):
+            prior_full_distance = None
+    base = prior_full_distance if prior_full_distance is not None else BASE_DISTANCE_NM
+    return base + haversine_nm(last_lat, last_lon, lat, lon)
 
 
 def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
@@ -177,8 +234,12 @@ def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
     )
     gc = gspread.authorize(creds)
     sheet = gc.open_by_key(sheet_id).worksheet(tab)
-    if is_duplicate_position(sheet, row_data["lat"], row_data["lon"]):
+    values = sheet.get_all_values()
+    if is_duplicate_position(values, row_data["lat"], row_data["lon"]):
         return False
+    row_data["full_distance"] = round(
+        compute_full_distance(values, row_data["lat"], row_data["lon"]), 4
+    )
     sheet.append_row([row_data[col] for col in SHEET_COLUMNS])
     return True
 
@@ -214,7 +275,8 @@ def main():
         return
     print(
         f"Wrote position for MMSI {cfg['mmsi']}: {result['lat']}, {result['lon']} "
-        f"at {result['time']} (speed={result['speed'] or '?'}, area={result['area'] or '?'})"
+        f"at {result['time']} (speed={result['speed'] or '?'}, area={result['area'] or '?'}, "
+        f"full_distance={result['full_distance']} nm)"
     )
 
 
