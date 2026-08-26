@@ -148,3 +148,8 @@ def test_wrap_text_short_text_stays_one_line():
 def test_output_filename_is_unique_per_variant():
     names = {output_filename(w, t) for w, t in VARIANTS}
     assert len(names) == len(VARIANTS) == 6
+
+
+def test_output_filename_supports_svg_and_png_extensions():
+    assert output_filename("normal", "dark", "svg") == "status-normal-dark.svg"
+    assert output_filename("normal", "dark", "png") == "status-normal-dark.png"

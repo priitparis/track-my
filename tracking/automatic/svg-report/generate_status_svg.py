@@ -7,13 +7,16 @@ to a fixed GitHub release ("latest-status") so they can be embedded
 elsewhere (e.g. Substack) via a stable download URL.
 
 Renders every combination of width (normal/compact) and background
-(dark/light/transparent) — six SVG files per run, listed in VARIANTS.
+(dark/light/transparent) — six SVG files per run, listed in VARIANTS —
+plus a rasterized PNG counterpart of each (via cairosvg), for embedding
+contexts that don't support SVG.
 """
 
 import math
 import os
 import sys
 
+import cairosvg
 import gspread
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
@@ -244,8 +247,8 @@ def build_status(scraper_positions, latest_scraper_row, latest_event_row):
     }
 
 
-def output_filename(width_key, theme_key):
-    return f"status-{width_key}-{theme_key}.svg"
+def output_filename(width_key, theme_key, extension="svg"):
+    return f"status-{width_key}-{theme_key}.{extension}"
 
 
 def main():
@@ -264,10 +267,15 @@ def main():
     os.makedirs(cfg["output_dir"], exist_ok=True)
     for width_key, theme_key in VARIANTS:
         svg = render_svg(status, width_key, theme_key)
-        path = os.path.join(cfg["output_dir"], output_filename(width_key, theme_key))
-        with open(path, "w", encoding="utf-8") as f:
+
+        svg_path = os.path.join(cfg["output_dir"], output_filename(width_key, theme_key, "svg"))
+        with open(svg_path, "w", encoding="utf-8") as f:
             f.write(svg)
-        print(f"Wrote {path}")
+        print(f"Wrote {svg_path}")
+
+        png_path = os.path.join(cfg["output_dir"], output_filename(width_key, theme_key, "png"))
+        cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png_path)
+        print(f"Wrote {png_path}")
 
     print(
         f"Done: {status['distance_nm']:.1f} nm, last event: {status['event_summary']}"
