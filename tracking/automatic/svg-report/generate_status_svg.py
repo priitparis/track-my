@@ -2,9 +2,12 @@
 Generates a status SVG summarizing the ship's current position, last
 event, and total distance traveled, reading from the "Scraper" and
 "Events" Google Sheet tabs. Intended to run as a short-lived GitHub
-Actions job on a cron schedule; the workflow commits the generated SVG
-back into the repo so it can be embedded elsewhere (e.g. Substack) via
-its raw.githubusercontent.com URL.
+Actions job on a cron schedule; the workflow uploads the generated SVGs
+to a fixed GitHub release ("latest-status") so they can be embedded
+elsewhere (e.g. Substack) via a stable download URL.
+
+Renders every combination of width (normal/compact) and background
+(dark/light/transparent) — six SVG files per run, listed in VARIANTS.
 """
 
 import math
@@ -48,7 +51,7 @@ def load_config():
         "sheet_id": os.environ["GOOGLE_SHEET_ID"],
         "scraper_tab": os.environ.get("GOOGLE_SHEET_SCRAPER_TAB", "Scraper"),
         "events_tab": os.environ.get("GOOGLE_SHEET_EVENTS_TAB", "Events"),
-        "output_path": os.environ.get("OUTPUT_SVG_PATH", "status/status.svg"),
+        "output_dir": os.environ.get("OUTPUT_SVG_DIR", "status"),
     }
 
 
@@ -101,30 +104,119 @@ def read_latest_event(sheet):
 
 # --- SVG rendering -----------------------------------------------------------
 
-SVG_TEMPLATE = """<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300" font-family="Helvetica, Arial, sans-serif">
-  <rect width="600" height="300" fill="#0b1f33"/>
-  <text x="24" y="40" fill="#ffffff" font-size="22" font-weight="bold">{ship_name} ({ship_type})</text>
-  <text x="24" y="62" fill="#9fb8cc" font-size="13">Flag: {ship_flag}  Call sign: {ship_call_sign}</text>
+# Two widths (px) — "normal" fits the original layout comfortably,
+# "compact" is a narrower variant for tighter spots (e.g. a Substack
+# sidebar), using smaller fonts and tighter line spacing rather than
+# dropping any field.
+WIDTHS = {
+    "normal": {"width": 600, "padding": 24, "label_size": 13, "value_size": 18, "title_size": 22, "line_gap": 4},
+    "compact": {"width": 400, "padding": 16, "label_size": 11, "value_size": 14, "title_size": 17, "line_gap": 3},
+}
 
-  <text x="24" y="100" fill="#9fb8cc" font-size="13">Last position ({position_time})</text>
-  <text x="24" y="124" fill="#ffffff" font-size="18">{lat:.4f}, {lon:.4f}</text>
+# Three backgrounds. "transparent" omits the background <rect> entirely
+# (no fill attribute at all) so the SVG composites onto whatever page
+# background it's embedded in.
+THEMES = {
+    "dark": {"bg": "#0b1f33", "label_fill": "#9fb8cc", "value_fill": "#ffffff"},
+    "light": {"bg": "#ffffff", "label_fill": "#5b6b78", "value_fill": "#0b1f33"},
+    "transparent": {"bg": None, "label_fill": "#9fb8cc", "value_fill": "#0b1f33"},
+}
 
-  <text x="24" y="158" fill="#9fb8cc" font-size="13">Speed / Course</text>
-  <text x="24" y="182" fill="#ffffff" font-size="18">{speed} kn / {course}&#176;</text>
+# Every (width, theme) combination rendered on each run, e.g. "normal-dark".
+VARIANTS = [(w, t) for w in WIDTHS for t in THEMES]
 
-  <text x="24" y="216" fill="#9fb8cc" font-size="13">Total distance traveled</text>
-  <text x="24" y="240" fill="#ffffff" font-size="18">{distance_nm:.1f} nm</text>
-
-  <text x="24" y="274" fill="#9fb8cc" font-size="13">Last event</text>
-  <text x="24" y="292" fill="#ffffff" font-size="14">{event_summary}</text>
-</svg>
-"""
+# Rough average character width as a fraction of font-size, used to
+# estimate rendered text width for word-wrapping without needing an
+# actual font-metrics library — good enough to decide when a line of
+# this sans-serif font needs to wrap, not pixel-exact.
+AVG_CHAR_WIDTH_RATIO = 0.55
 
 
-def render_svg(status):
-    """`status` is a plain dict with the fields referenced in
-    SVG_TEMPLATE — see build_status()."""
-    return SVG_TEMPLATE.format(**status)
+def _estimate_text_width(text, font_size):
+    return len(text) * font_size * AVG_CHAR_WIDTH_RATIO
+
+
+def _wrap_text(text, font_size, max_width):
+    """Greedily wraps `text` into lines that fit `max_width` at
+    `font_size`, using the character-count width estimate above."""
+    words = text.split()
+    if not words:
+        return [""]
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if _estimate_text_width(candidate, font_size) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _escape(text):
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def render_svg(status, width_key="normal", theme_key="dark"):
+    """Renders one SVG variant for the given width/theme keys (see
+    WIDTHS/THEMES). Height is computed from the actual number of lines
+    each field needs once long values (e.g. a long event description)
+    are word-wrapped to fit the chosen width."""
+    dims = WIDTHS[width_key]
+    theme = THEMES[theme_key]
+    width = dims["width"]
+    padding = dims["padding"]
+    label_size = dims["label_size"]
+    value_size = dims["value_size"]
+    title_size = dims["title_size"]
+    line_gap = dims["line_gap"]
+    text_max_width = width - 2 * padding
+
+    fields = [
+        ("title", f"{status['ship_name']} ({status['ship_type']})", title_size, True),
+        ("label", f"Flag: {status['ship_flag']}  Call sign: {status['ship_call_sign']}", label_size, False),
+        ("label", f"Last position ({status['position_time']})", label_size, False),
+        ("value", f"{status['lat']:.4f}, {status['lon']:.4f}", value_size, False),
+        ("label", "Speed / Course", label_size, False),
+        ("value", f"{status['speed']} kn / {status['course']}°", value_size, False),
+        ("label", "Total distance traveled", label_size, False),
+        ("value", f"{status['distance_nm']:.1f} nm", value_size, False),
+        ("label", "Last event", label_size, False),
+        ("value", status["event_summary"], value_size, False),
+    ]
+
+    elements = []
+    y = padding + title_size
+    for kind, text, font_size, bold in fields:
+        fill = theme["value_fill"] if kind in ("title", "value") else theme["label_fill"]
+        weight = ' font-weight="bold"' if bold else ""
+        for line in _wrap_text(text, font_size, text_max_width):
+            elements.append(
+                f'  <text x="{padding}" y="{y}" fill="{fill}" font-size="{font_size}"{weight}>'
+                f"{_escape(line)}</text>"
+            )
+            y += font_size + line_gap
+        y += font_size * 0.6  # extra gap between fields
+
+    height = round(y - font_size * 0.6 + padding - line_gap)
+
+    background = ""
+    if theme["bg"] is not None:
+        background = f'\n  <rect width="{width}" height="{height}" fill="{theme["bg"]}"/>'
+
+    body = "\n".join(elements)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" font-family="Helvetica, Arial, sans-serif">'
+        f"{background}\n{body}\n</svg>\n"
+    )
 
 
 def build_status(scraper_positions, latest_scraper_row, latest_event_row):
@@ -152,6 +244,10 @@ def build_status(scraper_positions, latest_scraper_row, latest_event_row):
     }
 
 
+def output_filename(width_key, theme_key):
+    return f"status-{width_key}-{theme_key}.svg"
+
+
 def main():
     cfg = load_config()
 
@@ -164,17 +260,17 @@ def main():
     latest_event_row = read_latest_event(events_sheet)
 
     status = build_status(scraper_positions, latest_scraper_row, latest_event_row)
-    svg = render_svg(status)
 
-    output_dir = os.path.dirname(cfg["output_path"])
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-    with open(cfg["output_path"], "w", encoding="utf-8") as f:
-        f.write(svg)
+    os.makedirs(cfg["output_dir"], exist_ok=True)
+    for width_key, theme_key in VARIANTS:
+        svg = render_svg(status, width_key, theme_key)
+        path = os.path.join(cfg["output_dir"], output_filename(width_key, theme_key))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(svg)
+        print(f"Wrote {path}")
 
     print(
-        f"Wrote {cfg['output_path']} ({status['distance_nm']:.1f} nm, "
-        f"last event: {status['event_summary']})"
+        f"Done: {status['distance_nm']:.1f} nm, last event: {status['event_summary']}"
     )
 
 

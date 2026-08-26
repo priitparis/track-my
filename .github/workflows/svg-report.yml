@@ -27,16 +27,16 @@ jobs:
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Generate status SVG
+      - name: Generate status SVGs
         env:
           GCP_SA_KEY_PATH: ${{ runner.temp }}/gcp-service-account.json
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SHEET_SCRAPER_TAB: Scraper
           GOOGLE_SHEET_EVENTS_TAB: Events
-          OUTPUT_SVG_PATH: ${{ runner.temp }}/status.svg
+          OUTPUT_SVG_DIR: ${{ runner.temp }}/status
         run: python tracking/automatic/svg-report/generate_status_svg.py
 
-      - name: Upload the SVG to the latest-status release
+      - name: Upload the SVGs to the latest-status release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload latest-status "${{ runner.temp }}/status.svg" --clobber
+        run: gh release upload latest-status "${{ runner.temp }}/status"/*.svg --clobber
