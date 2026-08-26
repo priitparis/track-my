@@ -1,0 +1,49 @@
+name: Status SVG report
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  generate-svg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r tracking/automatic/svg-report/requirements.txt
+
+      - name: Write service account key to a temp file
+        run: echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-service-account.json"
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Generate status SVG
+        env:
+          GCP_SA_KEY_PATH: ${{ runner.temp }}/gcp-service-account.json
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_SCRAPER_TAB: Scraper
+          GOOGLE_SHEET_EVENTS_TAB: Events
+          OUTPUT_SVG_PATH: status/status.svg
+        run: python tracking/automatic/svg-report/generate_status_svg.py
+
+      - name: Commit and push the SVG if it changed
+        run: |
+          if git diff --quiet -- status/status.svg; then
+            echo "No change to status/status.svg; skipping commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add status/status.svg
+          git commit -m "Update status SVG"
+          git push

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300" font-family="Helvetica, Arial, sans-serif">
+  <rect width="600" height="300" fill="#0b1f33"/>
+  <text x="24" y="40" fill="#ffffff" font-size="22" font-weight="bold">Sanuk (Sailing yacht)</text>
+  <text x="24" y="62" fill="#9fb8cc" font-size="13">Flag: Estonia  Call sign: ES4371</text>
+
+  <text x="24" y="100" fill="#9fb8cc" font-size="13">Last position (2026-08-25T14:07:46.225509+00:00)</text>
+  <text x="24" y="124" fill="#ffffff" font-size="18">51.0471, 2.3724</text>
+
+  <text x="24" y="158" fill="#9fb8cc" font-size="13">Speed / Course</text>
+  <text x="24" y="182" fill="#ffffff" font-size="18">? kn / ?&#176;</text>
+
+  <text x="24" y="216" fill="#9fb8cc" font-size="13">Total distance traveled</text>
+  <text x="24" y="240" fill="#ffffff" font-size="18">988.7 nm</text>
+
+  <text x="24" y="274" fill="#9fb8cc" font-size="13">Last event</text>
+  <text x="24" y="292" fill="#ffffff" font-size="14">STOP Moving - DUNKERQUE - France</text>
+</svg>
