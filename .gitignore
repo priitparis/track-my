@@ -12,3 +12,4 @@ umap_backup*.json
 /*.xlsx
 /*.umap
 .~lock.*#
+/status/
