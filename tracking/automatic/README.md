@@ -9,9 +9,10 @@ the same pattern as [../manual/](../manual/).
 
 ## Methods
 
-- [scraper/myshiptracking/](scraper/myshiptracking/) — primary method.
-  Scrapes the ship's MyShipTracking.com vessel page for its position
-  hourly.
+- [scraper/position/](scraper/position/) — primary method. Every 30
+  minutes, scrapes several public vessel-tracking sites
+  (MyShipTracking.com, MarineRadar.com) for the ship's position and
+  records the one reporting the freshest AIS fix.
 - [scraper/myshiptracking-events/](scraper/myshiptracking-events/) —
   scrapes MyShipTracking.com's separate event log (port arrivals/
   departures, start/stop moving) daily, appending only events not
