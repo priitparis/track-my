@@ -6,7 +6,7 @@ in the `Scraper` sheet tab that was written before that column existed.
 
 ## Why this exists
 
-[fetch_position.py](../../tracking/automatic/scraper/myshiptracking/fetch_position.py)
+[fetch_position.py](../../tracking/automatic/scraper/position/fetch_position.py)
 now writes a `full_distance` value (cumulative nautical miles traveled
 since departure) on every new row it appends, but rows written before
 that column was added are left blank. This script fills those in, using

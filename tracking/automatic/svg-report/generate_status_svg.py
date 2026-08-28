@@ -8,7 +8,7 @@ elsewhere (e.g. Substack) via a stable download URL.
 
 The total distance traveled is read directly from the Scraper tab's own
 "full_distance" column (computed and written by
-../scraper/myshiptracking/fetch_position.py on each of its runs) rather
+../scraper/position/fetch_position.py on each of its runs) rather
 than recomputed here.
 
 Renders every combination of width (normal/compact) and background

@@ -4,7 +4,7 @@ Automatic ship tracking via AISStream.io — polls a ship's live AIS position
 by MMSI on a schedule, no manual action required.
 
 This is the **secondary/backup** automatic method. See
-[../../scraper/myshiptracking/](../../scraper/myshiptracking/) for the
+[../../scraper/position/](../../scraper/position/) for the
 primary method (faster updates, more reliable coverage found so far),
 which is why this one runs at a lower frequency — see "Actions minutes
 budget" below.
@@ -87,7 +87,7 @@ not in this directory — GitHub only discovers workflows under
 On a private GitHub repo, the free tier includes 2,000 Actions minutes
 per month (public repos are unlimited), **shared** across every workflow
 in the repo — including
-[scraper/myshiptracking](../../scraper/myshiptracking/)'s. GitHub also caps any
+[scraper/position](../../scraper/position/)'s. GitHub also caps any
 single job at 6 hours regardless of your own timeout, so a very long
 `CONNECT_TIMEOUT_SECONDS` doesn't buy unlimited waiting — it just spends
 the same budget on fewer, longer attempts instead of more, shorter ones.
@@ -102,7 +102,7 @@ min/month at its defaults), the total is about 1,240 min/month — leaving
 good headroom under the shared 2,000 minute cap. If you change either
 method's interval or timeout, recompute both together, not just the one
 you're editing — see
-[scraper/myshiptracking/README.md](../../scraper/myshiptracking/README.md#actions-minutes-budget)
+[scraper/position/README.md](../../scraper/position/README.md#actions-minutes-budget)
 for its side of the calculation.
 
 ### Local testing (optional)

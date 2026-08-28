@@ -3,7 +3,7 @@ One-time backfill: computes the "full_distance" column for every
 existing row in the Scraper sheet tab that doesn't have it yet (rows
 written before that column existed), using the same Haversine +
 BASE_DISTANCE_NM logic as
-../../tracking/automatic/scraper/myshiptracking/fetch_position.py
+../../tracking/automatic/scraper/position/fetch_position.py
 (imported directly from there, not duplicated here).
 
 Not part of the ongoing automation — run manually, once, after adding
@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(
     0,
-    os.path.join(os.path.dirname(__file__), "..", "..", "tracking", "automatic", "scraper", "myshiptracking"),
+    os.path.join(os.path.dirname(__file__), "..", "..", "tracking", "automatic", "scraper", "position"),
 )
 
 import gspread

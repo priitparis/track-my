@@ -7,7 +7,7 @@ pointing at the same Web App URL with a different `?sheet=` value:
 
 - `?sheet=Location` — the [manual method](../manual/google-apps-script/)'s tab
 - `?sheet=Auto` — the [AISStream method](../automatic/api/aisstream/)'s tab
-- `?sheet=Scraper` — the [scraper method](../automatic/scraper/myshiptracking/)'s tab
+- `?sheet=Scraper` — the [scraper method](../automatic/scraper/position/)'s tab
 - `?sheet=Events` — the [event log scraper](../automatic/scraper/myshiptracking-events/)'s tab (each point's `properties` also includes `event`, `port`, `country`, `speed`, `course` when present, on top of the usual `time`)
 - `?sheet=Blog` — the [blog location extractor](../automatic/api/blog-locations/)'s tab (each point's `properties` also includes `name`, `description`, `post_title`, `post_date`, `post_url`, `group_id`)
 
