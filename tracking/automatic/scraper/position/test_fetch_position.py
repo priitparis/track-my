@@ -22,6 +22,7 @@ from fetch_position import (
     compute_full_distance,
     haversine_nm,
     is_duplicate_position,
+    is_stale_fix,
     pick_freshest,
 )
 
@@ -151,6 +152,37 @@ def test_unparseable_last_row_is_not_duplicate():
     assert is_duplicate_position(values, 54.32, 10.13) is False
 
 
+# --- stale-fix guard -------------------------------------------------
+
+def test_empty_sheet_is_never_stale():
+    assert is_stale_fix(_values(), "2026-06-01T09:00:00+00:00") is False
+
+
+def test_older_fix_than_last_row_is_stale():
+    values = _values(["54.0", "10.0", "2026-06-01T12:00:00+00:00"])
+    assert is_stale_fix(values, "2026-06-01T11:59:00+00:00") is True
+
+
+def test_equal_time_to_last_row_is_stale():
+    values = _values(["54.0", "10.0", "2026-06-01T12:00:00+00:00"])
+    assert is_stale_fix(values, "2026-06-01T12:00:00+00:00") is True
+
+
+def test_newer_fix_than_last_row_is_not_stale():
+    values = _values(["54.0", "10.0", "2026-06-01T12:00:00+00:00"])
+    assert is_stale_fix(values, "2026-06-01T12:30:00+00:00") is False
+
+
+def test_stale_check_skipped_when_last_row_time_is_blank():
+    values = _values(["54.0", "10.0", ""])
+    assert is_stale_fix(values, "2026-06-01T12:00:00+00:00") is False
+
+
+def test_stale_check_skipped_when_new_time_is_blank():
+    values = _values(["54.0", "10.0", "2026-06-01T12:00:00+00:00"])
+    assert is_stale_fix(values, "") is False
+
+
 # --- full_distance ---------------------------------------------------
 
 def test_compute_full_distance_with_empty_sheet_is_base_distance():
@@ -184,33 +216,44 @@ def test_source_column_is_last_in_sheet_columns():
     assert SHEET_COLUMNS[-1] == "source"
 
 
-def test_append_to_sheet_skips_duplicate_row():
-    sheet = _sheet_with_last_row(["54.32", "10.13", "2026-06-01T09:00:00Z"])
+def _append(sheet, row_data):
     gc = MagicMock()
     gc.open_by_key.return_value.worksheet.return_value = sheet
-    row_data = {col: "" for col in SHEET_COLUMNS}
-    row_data.update(lat=54.32, lon=10.13)
-
     with patch("fetch_position.gspread.authorize", return_value=gc), \
          patch("fetch_position.Credentials.from_service_account_file"):
-        written = append_to_sheet("dummy-key.json", "dummy-sheet-id", "Scraper", row_data)
+        return append_to_sheet("dummy-key.json", "dummy-sheet-id", "Scraper", row_data)
 
-    assert written is False
+
+def _row_data(**overrides):
+    row = {col: "" for col in SHEET_COLUMNS}
+    row.update(overrides)
+    return row
+
+
+def test_append_to_sheet_skips_duplicate_row():
+    sheet = _sheet_with_last_row(["54.32", "10.13", "2026-06-01T09:00:00+00:00"])
+    row_data = _row_data(lat=54.32, lon=10.13, time="2026-06-01T10:00:00+00:00")
+
+    assert _append(sheet, row_data) == "duplicate"
+    sheet.append_row.assert_not_called()
+
+
+def test_append_to_sheet_skips_stale_fix():
+    sheet = _sheet_with_last_row(["54.32", "10.13", "2026-06-01T12:00:00+00:00"])
+    # Different position (not a duplicate), but an older Time.
+    row_data = _row_data(lat=55.00, lon=10.13, time="2026-06-01T11:00:00+00:00")
+
+    assert _append(sheet, row_data) == "stale"
     sheet.append_row.assert_not_called()
 
 
 def test_append_to_sheet_writes_new_position_with_full_distance_and_source():
-    sheet = _sheet_with_last_row(["54.32", "10.13", "2026-06-01T09:00:00Z"])
-    gc = MagicMock()
-    gc.open_by_key.return_value.worksheet.return_value = sheet
-    row_data = {col: "" for col in SHEET_COLUMNS}
-    row_data.update(lat=54.50, lon=10.13, source="marineradar")
+    sheet = _sheet_with_last_row(["54.32", "10.13", "2026-06-01T09:00:00+00:00"])
+    row_data = _row_data(
+        lat=54.50, lon=10.13, source="marineradar", time="2026-06-01T10:00:00+00:00"
+    )
 
-    with patch("fetch_position.gspread.authorize", return_value=gc), \
-         patch("fetch_position.Credentials.from_service_account_file"):
-        written = append_to_sheet("dummy-key.json", "dummy-sheet-id", "Scraper", row_data)
-
-    assert written is True
+    assert _append(sheet, row_data) == "written"
     expected_full_distance = round(
         BASE_DISTANCE_NM + haversine_nm(54.32, 10.13, 54.50, 10.13), 4
     )

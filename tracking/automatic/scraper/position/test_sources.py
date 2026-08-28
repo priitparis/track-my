@@ -90,52 +90,144 @@ def test_myshiptracking_dashes_become_blank():
 
 # --- marineradar --------------------------------------------------
 
-MR_LDJSON = """
-<script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[
- {"@type":"WebPage","@id":"x"},
- {"@type":"Boat","name":"SANUK",
-  "identifier":[{"@type":"PropertyValue","propertyID":"MMSI","value":"276017710"}],
-  "nationality":{"@type":"Country","name":"EE"},
-  "location":{"@type":"GeoCoordinates","latitude":50.724968,"longitude":1.5996766,
-    "observationDate":"2026-08-28T06:51:58Z"},
-  "additionalProperty":[
-    {"@type":"PropertyValue","propertyID":"speedOverGround","value":5.7,"unitText":"knots"},
-    {"@type":"PropertyValue","propertyID":"courseOverGround","value":173,"unitText":"degrees"},
-    {"@type":"PropertyValue","propertyID":"heading","value":511,"unitText":"degrees"},
-    {"@type":"PropertyValue","propertyID":"navigationStatus","value":"Class B"}
-  ]}
-]}
-</script>
-"""
+def _next_f_push(obj_json):
+    """Wrap a JSON fragment the way Next.js flushes server data into the
+    page: self.__next_f.push([1,"<json-string>"])."""
+    import json as _json
+
+    return f'<script>self.__next_f.push([1,{_json.dumps(obj_json)}])</script>'
 
 
-def test_marineradar_fetch_parses_jsonld_boat_node():
-    with patch("sources.marineradar.requests.get", return_value=_response(MR_LDJSON)):
+def _mr_html(ship):
+    import json as _json
+
+    return (
+        "<html><body>"
+        + _next_f_push('1:["$","div",null,{}]\n')
+        + _next_f_push('2b:["$","$L34",null,{"ship":' + _json.dumps(ship) + ',"x":1}]\n')
+        + "</body></html>"
+    )
+
+
+MR_SHIP = {
+    "mmsi": 276017710,
+    "country": "EE",
+    "call_sign": "ES4371",
+    "imo_number": None,
+    "current_draught": None,
+    "maximum_static_draught": 2.4,
+    "dimension_a": 8, "dimension_b": 6, "dimension_c": 2, "dimension_d": 3,
+    "gross_tonnage": None,
+    "dead_weight": None,
+    "year_built": 2015,
+    "speed": 5.7,
+    "course": 173,
+    "heading": 511,
+    "navigation_status": "Class B",
+    "last_position": "2026-08-28T06:51:58Z",
+    "location": {"type": "Point", "coordinates": [1.5996766, 50.724968]},
+}
+
+MR_WEATHER = {
+    "current": {
+        "temperature_2m": 19.6,
+        "relative_humidity_2m": 73,
+        "pressure_msl": 1007.7,
+        "wind_speed_10m": 15,
+        "wind_direction_10m": 240,
+        "weather_code": 3,
+    }
+}
+
+
+class _FakeSession:
+    """Stand-in for requests.Session: page GET returns the vessel HTML,
+    the /api/weather GET returns MR_WEATHER (override via `weather`)."""
+
+    def __init__(self, html, weather=MR_WEATHER, weather_exc=None):
+        self.headers = {}
+        self._html = html
+        self._weather = weather
+        self._weather_exc = weather_exc
+        self.weather_calls = []
+
+    def get(self, url, params=None, timeout=None):
+        if url.endswith("/api/weather"):
+            self.weather_calls.append(params)
+            if self._weather_exc:
+                raise self._weather_exc
+            return _json_response(self._weather)
+        return _response(self._html)
+
+
+def _json_response(payload):
+    resp = MagicMock()
+    resp.json.return_value = payload
+    resp.raise_for_status.return_value = None
+    return resp
+
+
+def _patch_session(session):
+    return patch("sources.marineradar.requests.Session", return_value=session)
+
+
+def test_marineradar_fetch_parses_ship_payload_and_weather():
+    session = _FakeSession(_mr_html(MR_SHIP))
+    with _patch_session(session):
         row = marineradar.fetch("276017710", timeout=5)
     assert row["lat"] == 50.724968 and row["lon"] == 1.5996766
     assert row["reported_at"] == "2026-08-28T06:51:58+00:00"
     assert row["speed"] == "5.7 knots"
-    assert row["course"] == "173 degrees"
+    assert row["course"] == "173 °"
     assert row["status"] == "Class B"
     assert row["flag"] == "EE"
+    assert row["call_sign"] == "ES4371"
+    assert row["size"] == "14 x 5 m"           # (a+b) x (c+d)
+    assert row["build"] == "2015"
+    assert row["draught"] == "2.4"             # falls back to maximum_static_draught
     assert row["source"] == "marineradar"
-    # Fields MarineRadar's JSON-LD doesn't carry stay blank.
-    assert row["area"] == "" and row["draught"] == "" and row["temperature"] == ""
+    # weather from /api/weather
+    assert row["temperature"] == "19.6 °C"
+    assert row["humidity"] == "73 %"
+    assert row["pressure"] == "1007.7 hPa"
+    assert row["wind_speed"] == "15 km/h"
+    assert row["wind_direction"] == "240 °"
+    assert row["cloud_coverage"] == ""         # no cloud value in the response
+    # queried the right coordinates
+    assert session.weather_calls == [{"lat": 50.724968, "lon": 1.5996766}]
 
 
-def test_marineradar_fetch_returns_none_without_boat_node():
-    with patch("sources.marineradar.requests.get", return_value=_response("<html>nothing</html>")):
+def test_marineradar_null_static_fields_stay_blank():
+    ship = dict(MR_SHIP, call_sign=None, year_built=None,
+                dimension_a=0, dimension_b=0, dimension_c=0, dimension_d=0)
+    session = _FakeSession(_mr_html(ship))
+    with _patch_session(session):
+        row = marineradar.fetch("276017710", timeout=5)
+    assert row["call_sign"] == "" and row["build"] == "" and row["size"] == ""
+
+
+def test_marineradar_weather_failure_does_not_sink_position():
+    import requests as _requests
+
+    session = _FakeSession(
+        _mr_html(MR_SHIP), weather_exc=_requests.ConnectionError("weather down")
+    )
+    with _patch_session(session):
+        row = marineradar.fetch("276017710", timeout=5)
+    assert row["lat"] == 50.724968
+    assert row["temperature"] == "" and row["humidity"] == ""
+
+
+def test_marineradar_fetch_returns_none_without_ship_payload():
+    session = _FakeSession("<html><body>no data here</body></html>")
+    with _patch_session(session):
         assert marineradar.fetch("276017710", timeout=5) is None
 
 
 def test_marineradar_fetch_returns_none_without_coordinates():
-    ldjson = (
-        '<script type="application/ld+json">'
-        '{"@type":"Boat","location":{"@type":"GeoCoordinates"}}'
-        "</script>"
-    )
-    with patch("sources.marineradar.requests.get", return_value=_response(ldjson)):
+    ship = dict(MR_SHIP, location={"type": "Point", "coordinates": []})
+    session = _FakeSession(_mr_html(ship))
+    with _patch_session(session):
         assert marineradar.fetch("276017710", timeout=5) is None
 
 

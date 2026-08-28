@@ -22,11 +22,11 @@ there.
 | Module | Site | How the position is read |
 |---|---|---|
 | [sources/myshiptracking.py](sources/myshiptracking.py) | [myshiptracking.com](https://www.myshiptracking.com/) | `(lat, lon)` from a `<script>` block's AJAX URL string; speed/course/trip/weather/vessel-info from the page's clearly-sectioned tables (`ft-info`, `ft-trip`, `ft-position`, `ft-weather`); the AIS "reported on" time from the page's prose summary. |
-| [sources/marineradar.py](sources/marineradar.py) | [marineradar.com](https://www.marineradar.com/) | The page's schema.org JSON-LD block (`<script type="application/ld+json">`, `Boat` node): `location` for coordinates + `observationDate`, `additionalProperty` for speed/course/navigation-status. |
+| [sources/marineradar.py](sources/marineradar.py) | [marineradar.com](https://www.marineradar.com/) | The Next.js server-data payload embedded in the page (`self.__next_f.push([...])` chunks) carries a structured `ship` object: coordinates, `last_position` (AIS time), speed/course/heading/navigation-status, plus static details (call sign, IMO, AIS dimensions → size, tonnage, year built, draught) when present. Weather is a second request to MarineRadar's own `GET /api/weather?lat=&lon=` (an Open-Meteo passthrough): temperature, humidity, pressure, wind. |
 
-Neither site needs an API key or account, and both embed the data in the
-served HTML, so a plain HTTP request is enough — no JavaScript rendering
-or headless browser.
+Neither site needs an API key or account, and the data is served over
+plain HTTP (in the page's HTML, or a public JSON endpoint) — no
+JavaScript rendering or headless browser.
 
 Sites investigated and **not** usable for precise position without a
 paid API: **VesselFinder** (HTML rounds lat/lon to whole degrees),
@@ -41,8 +41,10 @@ paid API: **VesselFinder** (HTML rounds lat/lon to whole degrees),
   Python script run fresh on every scheduled tick — no persistent
   process. It queries all sources **concurrently** (a
   `ThreadPoolExecutor`), each waiting up to `REQUEST_TIMEOUT_SECONDS`
-  (30s by default), so a run's wall time stays near one request, not the
-  sum.
+  (30s by default), so a run's wall time stays near one source's work,
+  not the sum. (A source may itself make more than one request —
+  MarineRadar fetches the page then the weather endpoint — but those are
+  sequential within that source's slot.)
 - **Selection**: of the sources that returned a position, the one with
   the newest `reported_at` (AIS observation time) wins; ties, or sources
   that expose no observation time, are broken by `SOURCES` order
@@ -98,23 +100,27 @@ full_distance | source
   tracking method's sheet. `Time` is the winning source's AIS
   observation time as an ISO-8601 UTC string (MyShipTracking parses it
   from the page's "... as reported on `2026-08-27 09:18` by AIS ..."
-  sentence, minute precision; MarineRadar takes it from the JSON-LD
-  `observationDate`). If the winning source exposed no observation time,
-  `Time` falls back to the script's own UTC run time.
+  sentence, minute precision; MarineRadar takes it from the `ship`
+  payload's `last_position`). If the winning source exposed no
+  observation time, `Time` falls back to the script's own UTC run time.
 - `speed` / `course` / `area` / `status` / `draught` — position/status
   fields. Every source fills what it has and leaves the rest blank
-  (MarineRadar, for instance, has speed/course/status but not area or
-  draught).
+  (MarineRadar has speed/course/status and draught, but not `area`).
 - `imo` / `flag` / `call_sign` / `size` / `gt` / `dwt` / `build` —
   static vessel-info fields. These rarely or never change between runs
   and are simply repeated on every row rather than stored once
-  separately, for simplicity.
+  separately, for simplicity. Both sources populate these when the site
+  has them (`size` is a `L x B m` string; MarineRadar derives it from
+  the AIS reference-point dimensions).
 - `distance_travelled` / `remaining_distance` / `avg_speed` /
   `max_speed` / `time_travelled` — current-trip fields (MyShipTracking's
   "Current Trip" table; blank for sources that don't expose them).
 - `temperature` / `wind_speed` / `wind_direction` / `pressure` /
-  `humidity` / `cloud_coverage` — weather at the ship's current
-  position (MyShipTracking's "Weather" table).
+  `humidity` / `cloud_coverage` — current weather at the ship's
+  position. MyShipTracking reads its "Weather" table; MarineRadar calls
+  its `/api/weather` endpoint. Units follow each source (e.g. wind in
+  knots from MyShipTracking, km/h from MarineRadar); `cloud_coverage` is
+  blank for MarineRadar (its weather response has no cloud figure).
 - `full_distance` — cumulative distance since departure, in nautical
   miles (see the source comment on `BASE_DISTANCE_NM` for the
   derivation). One chain across all sources: each new row adds the
@@ -127,11 +133,18 @@ full_distance | source
 A field a source doesn't have (including MyShipTracking's `---` "not
 available" cells) is written as a blank cell.
 
-Before appending, the script compares the new `(lat, lon)` against the
-sheet's last row; if both are within ~10m (0.0001°) of each other, the
-row is skipped rather than written — this avoids piling up duplicate
-rows while the ship is stationary (in port, at anchor) and the sites
-keep returning the same last-known AIS fix on every run.
+Before appending, the script applies two guards against the sheet's
+current last row and skips the write if either trips:
+
+- **Duplicate position** — the new `(lat, lon)` is within ~10m (0.0001°)
+  of the last row. Avoids piling up rows while the ship is stationary
+  (in port, at anchor) and the sites keep returning the same last-known
+  AIS fix.
+- **Stale fix** — the new `Time` is not strictly newer than the last
+  row's `Time`. Since one row is appended per run with no re-sorting
+  step, writing an older fix (which can happen only if *every* source
+  serves an out-of-date position at once) would leave the tab out of
+  chronological order, so it's dropped instead.
 
 ## Setup
 

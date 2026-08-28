@@ -159,6 +159,29 @@ def is_duplicate_position(values, lat, lon):
     )
 
 
+def _last_row_time(values):
+    """Returns the Time cell (ISO-8601 string, column index 2) of the
+    sheet's last data row, or '' if there isn't one / it's blank."""
+    if len(values) < 2:
+        return ""
+    last_row = values[-1]
+    return last_row[2] if len(last_row) > 2 else ""
+
+
+def is_stale_fix(values, new_time):
+    """True if `new_time` (the ISO-8601 Time about to be written) is not
+    strictly newer than the sheet's current last row. Guards against a
+    row landing out of chronological order when every source happens to
+    serve an old AIS fix — since one row is appended per run and there is
+    no re-sorting step, an older Time would leave the tab out of order.
+    Returns False if the sheet has no data rows yet or its last row has
+    no parseable Time (nothing to compare against)."""
+    last_time = _last_row_time(values)
+    if not last_time or not new_time:
+        return False
+    return new_time <= last_time
+
+
 def compute_full_distance(values, lat, lon):
     """Cumulative distance-since-departure through this new (lat, lon)
     point, in nautical miles: the historical base distance plus the
@@ -181,6 +204,9 @@ def compute_full_distance(values, lat, lon):
 
 
 def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
+    """Appends the row unless it would be a duplicate position or a stale
+    fix (Time not newer than the sheet's last row). Returns "written",
+    "duplicate", or "stale"."""
     creds = Credentials.from_service_account_file(
         sa_key_path,
         scopes=["https://www.googleapis.com/auth/spreadsheets"],
@@ -189,12 +215,14 @@ def append_to_sheet(sa_key_path, sheet_id, tab, row_data):
     sheet = gc.open_by_key(sheet_id).worksheet(tab)
     values = sheet.get_all_values()
     if is_duplicate_position(values, row_data["lat"], row_data["lon"]):
-        return False
+        return "duplicate"
+    if is_stale_fix(values, row_data["time"]):
+        return "stale"
     row_data["full_distance"] = round(
         compute_full_distance(values, row_data["lat"], row_data["lon"]), 4
     )
     sheet.append_row([row_data.get(col, "") for col in SHEET_COLUMNS])
-    return True
+    return "written"
 
 
 def main():
@@ -219,12 +247,19 @@ def main():
     # Prefer the AIS-reported observation time; fall back to the
     # scraper's own run time if no source exposed one.
     result["time"] = result.get("reported_at") or datetime.now(timezone.utc).isoformat()
-    written = append_to_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], result)
-    if not written:
+    outcome = append_to_sheet(cfg["sa_key_path"], cfg["sheet_id"], cfg["tab"], result)
+    if outcome == "duplicate":
         print(
             f"Skipped MMSI {cfg['mmsi']}: position {result['lat']}, {result['lon']} "
             f"(source {result['source']}) matches the last recorded row; "
             "ship appears stationary."
+        )
+        return
+    if outcome == "stale":
+        print(
+            f"Skipped MMSI {cfg['mmsi']}: freshest fix (source {result['source']}, "
+            f"{result['time']}) is not newer than the last recorded row; "
+            "all sources appear to be serving an old position."
         )
         return
     print(
