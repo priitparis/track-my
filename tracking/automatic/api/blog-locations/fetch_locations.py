@@ -115,14 +115,23 @@ def fetch_feed_posts(feed_url):
     Retries on a 403 response: Substack occasionally rate-limits or
     briefly blocks a fetch that looks automated, and a short delay before
     retrying can succeed where an immediate retry wouldn't."""
+    print(f"Fetching blog feed from {feed_url} ...")
     response = None
     for attempt in range(1, FEED_FETCH_RETRIES + 1):
         response = requests.get(feed_url, headers=FEED_REQUEST_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code != 403 or attempt == FEED_FETCH_RETRIES:
             break
-        print(f"Feed fetch got HTTP 403 (attempt {attempt}/{FEED_FETCH_RETRIES}), retrying...")
+        print(f"Feed fetch got HTTP 403 (attempt {attempt}/{FEED_FETCH_RETRIES}), "
+              f"retrying in {FEED_FETCH_RETRY_DELAY_SECONDS}s...")
         time.sleep(FEED_FETCH_RETRY_DELAY_SECONDS)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise requests.RequestException(
+            f"{e} (url={feed_url}, status={response.status_code}, "
+            f"body_preview={response.text[:200]!r})"
+        ) from e
+    print(f"Feed responded with HTTP {response.status_code}, {len(response.text)} bytes.")
     xml = response.text
 
     posts = []
@@ -198,12 +207,15 @@ def append_locations(sheet, post, locations, group_id):
 
 def main():
     cfg = load_config()
+    print(f"Config: sheet_id={cfg['sheet_id']}, tab='{cfg['tab']}', "
+          f"group_id={cfg['group_id']}, gemini_model={GEMINI_MODEL}")
 
     try:
         posts = fetch_feed_posts(cfg["feed_url"])
     except requests.RequestException as e:
-        print(f"Failed to fetch blog feed: {e}")
-        sys.exit(0)
+        sys.exit(f"Failed to fetch blog feed after {FEED_FETCH_RETRIES} attempt(s): {e}")
+
+    print(f"Feed contains {len(posts)} post(s).")
 
     if not posts:
         # A feed with literally zero parseable posts almost certainly
@@ -223,20 +235,24 @@ def main():
 
     seen = already_processed_urls(sheet)
     new_posts = [p for p in posts if p["url"] not in seen]
+    print(f"{len(seen)} post(s) already recorded, {len(new_posts)} new post(s) to process.")
 
     if not new_posts:
-        print(f"No new posts to process ({len(posts)} in feed, all already recorded).")
         sys.exit(0)
 
     client = genai.Client(api_key=cfg["gemini_api_key"])
 
     total_added = 0
     for post in new_posts:
+        print(f"Processing '{post['title']}' ({post['url']}, published {post['pub_date']})...")
         try:
             locations = extract_locations(client, post["text"])
         except Exception as e:
             print(f"Failed to extract locations for '{post['title']}': {e}")
             continue
+
+        for loc in locations:
+            print(f"  - {loc.name} ({loc.latitude}, {loc.longitude}): {loc.description}")
 
         added = append_locations(sheet, post, locations, cfg["group_id"])
         total_added += added
