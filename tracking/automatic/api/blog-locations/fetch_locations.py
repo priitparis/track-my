@@ -42,17 +42,30 @@ CONTENT_PATTERN = re.compile(r"<content:encoded><!\[CDATA\[(.*?)\]\]></content:e
 TAG_STRIP_PATTERN = re.compile(r"<[^>]+>")
 
 EXTRACTION_PROMPT = """\
-Analyze the following travel/blog post (written in Estonian) and extract \
-every location visited (ports, stops, landmarks, etc.) in chronological \
-order.
+Analyze the following travel/blog post (written in Estonian), written by \
+someone travelling by ship, and extract every location the traveller \
+themselves actually physically visited or passed through, in \
+chronological order.
 
-For each location, provide:
+The writer is on a ship, so merely mentioning a place name in the text \
+does NOT mean it was visited — only include a location if the text \
+describes the traveller actually being there or going there:
+- Include: ports/cities the ship docked at or passed by, and any stop \
+reached by an activity described in the text (e.g. "took a bus into the \
+city centre", "went ashore to see the old town", "walked to the market").
+- Exclude: places mentioned only in passing — historical or background \
+references, comparisons, previews of an upcoming stop not yet reached, \
+things read or heard about, or the origin/destination of a route that \
+the traveller did not actually stop at or enter.
+When in doubt whether a mention describes an actual visit, leave it out.
+
+For each visited location, provide:
 - latitude and longitude: precise WGS84 coordinates (decimal degrees)
 - name: the location's name with a sequence number (e.g. "1. Ruhnu sadam")
 - description: a short 1-2 sentence summary of what happened there, in \
 Estonian (matching the source text's language)
 
-If the text contains no identifiable locations, return an empty list.
+If the text describes no actual visits, return an empty list.
 
 Text:
 {text}

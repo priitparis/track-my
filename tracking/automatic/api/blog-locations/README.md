@@ -6,8 +6,10 @@ on a schedule, no manual action required.
 
 Unlike every other tracking method, this one doesn't track the ship's
 live position. It reads the crew's own trip blog and asks an LLM to
-extract the chronological locations mentioned (ports, stops, landmarks)
-with a short description of what happened there. This mirrors a manual
+extract the chronological locations actually visited (ports, stops,
+landmarks reached by e.g. a shore excursion) — not merely mentioned in
+passing — with a short description of what happened there. This mirrors
+a manual
 workflow the user already had — pasting a blog post into an LLM chat with
 a location-extraction prompt, then copying the CSV result into a map by
 hand — automated and running on a free LLM tier.
@@ -152,6 +154,12 @@ python fetch_locations.py     # loads .env automatically (run from this director
   mentioned in the text — there's no independent verification against a
   real geocoding service. Spot-check new entries before trusting them
   for navigation purposes.
+- The prompt asks the model to only extract locations actually visited
+  (e.g. a port the ship stopped at, or a place reached via a bus/walk
+  described in the text) and to skip places merely mentioned in passing
+  (background references, previews of an upcoming stop, etc.). This
+  relies on the LLM correctly reading intent from the narrative — it can
+  still misjudge an ambiguous mention either way. Spot-check new entries.
 - `Time` is when the script processed the post, not when the location
   was actually visited — the blog text itself may mention approximate
   dates/times in its narrative (captured in `description` if the model
