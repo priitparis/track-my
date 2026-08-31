@@ -39,8 +39,9 @@ FEED_REQUEST_HEADERS = {
     "Accept": "application/rss+xml, application/xml, text/xml, */*;q=0.9",
     "Accept-Language": "en-US,en;q=0.9",
 }
-FEED_FETCH_RETRIES = 3
+FEED_FETCH_RETRIES = 2
 FEED_FETCH_RETRY_DELAY_SECONDS = 5
+RSS2JSON_API_URL = "https://api.rss2json.com/v1/api.json"
 
 ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
 TITLE_PATTERN = re.compile(r"<title><!\[CDATA\[(.*?)\]\]></title>")
@@ -108,20 +109,18 @@ def clean_html(raw_html):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def fetch_feed_posts(feed_url):
-    """Fetch the RSS feed and return a list of posts, each with title,
-    url, published date, and plain-text content.
-
-    Retries on a 403 response: Substack occasionally rate-limits or
-    briefly blocks a fetch that looks automated, and a short delay before
-    retrying can succeed where an immediate retry wouldn't."""
+def fetch_feed_xml(feed_url):
+    """Fetch the raw RSS XML directly, retrying a 403 a couple of times
+    with a short delay. Raises requests.RequestException (with the URL,
+    status, and a body preview attached) if this doesn't end up
+    succeeding — the caller falls back to fetch_feed_posts_via_proxy."""
     print(f"Fetching blog feed from {feed_url} ...")
     response = None
     for attempt in range(1, FEED_FETCH_RETRIES + 1):
         response = requests.get(feed_url, headers=FEED_REQUEST_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code != 403 or attempt == FEED_FETCH_RETRIES:
             break
-        print(f"Feed fetch got HTTP 403 (attempt {attempt}/{FEED_FETCH_RETRIES}), "
+        print(f"Direct feed fetch got HTTP 403 (attempt {attempt}/{FEED_FETCH_RETRIES}), "
               f"retrying in {FEED_FETCH_RETRY_DELAY_SECONDS}s...")
         time.sleep(FEED_FETCH_RETRY_DELAY_SECONDS)
     try:
@@ -131,9 +130,13 @@ def fetch_feed_posts(feed_url):
             f"{e} (url={feed_url}, status={response.status_code}, "
             f"body_preview={response.text[:200]!r})"
         ) from e
-    print(f"Feed responded with HTTP {response.status_code}, {len(response.text)} bytes.")
-    xml = response.text
+    print(f"Direct feed fetch responded with HTTP {response.status_code}, {len(response.text)} bytes.")
+    return response.text
 
+
+def parse_feed_xml(xml):
+    """Parse raw RSS XML into a list of posts, each with title, url,
+    published date, and plain-text content."""
     posts = []
     for item in ITEM_PATTERN.findall(xml):
         title_match = TITLE_PATTERN.search(item)
@@ -150,6 +153,50 @@ def fetch_feed_posts(feed_url):
             "text": clean_html(content_match.group(1)),
         })
     return posts
+
+
+def fetch_feed_posts_via_proxy(feed_url):
+    """Fetch the feed through the rss2json.com proxy instead of directly.
+    Used as a fallback when a direct fetch is blocked (e.g. by Substack's
+    Cloudflare bot-challenge for datacenter IPs like GitHub Actions
+    runners) — the proxy fetches the feed from its own IP and returns it
+    as JSON. The free/keyless tier only returns the most recent 10 items,
+    which is fine given how often this script runs (see README)."""
+    print(f"Direct fetch failed; falling back to rss2json.com proxy for {feed_url} ...")
+    response = requests.get(
+        RSS2JSON_API_URL,
+        params={"rss_url": feed_url},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if data.get("status") != "ok":
+        raise requests.RequestException(f"rss2json.com returned an error: {data}")
+
+    items = data.get("items", [])
+    print(f"Proxy fetch responded with {len(items)} item(s).")
+    return [
+        {
+            "title": (item.get("title") or "").strip(),
+            "url": (item.get("link") or "").strip(),
+            "pub_date": (item.get("pubDate") or "").strip(),
+            "text": clean_html(item.get("content") or ""),
+        }
+        for item in items
+        if item.get("link") and item.get("content")
+    ]
+
+
+def fetch_feed_posts(feed_url):
+    """Fetch the RSS feed and return a list of posts, each with title,
+    url, published date, and plain-text content. Tries a direct fetch
+    first, falling back to the rss2json.com proxy if that fails."""
+    try:
+        xml = fetch_feed_xml(feed_url)
+    except requests.RequestException as e:
+        print(f"Direct feed fetch failed: {e}")
+        return fetch_feed_posts_via_proxy(feed_url)
+    return parse_feed_xml(xml)
 
 
 def extract_locations(client, post_text):
@@ -213,7 +260,7 @@ def main():
     try:
         posts = fetch_feed_posts(cfg["feed_url"])
     except requests.RequestException as e:
-        sys.exit(f"Failed to fetch blog feed after {FEED_FETCH_RETRIES} attempt(s): {e}")
+        sys.exit(f"Failed to fetch blog feed (direct fetch and rss2json.com proxy both failed): {e}")
 
     print(f"Feed contains {len(posts)} post(s).")
 

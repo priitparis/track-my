@@ -19,7 +19,9 @@ hand — automated and running on a free LLM tier.
 - **Data source**: the blog's RSS feed (set via `BLOG_FEED_URL`, e.g. a
   Substack feed at `https://yourblog.substack.com/feed`), which includes
   each post's full HTML content (`content:encoded`) — no scraping of the
-  blog's web pages needed.
+  blog's web pages needed. Fetched directly first; if that's blocked
+  (see "Known limitations"), falls back to fetching the same feed
+  through the [rss2json.com](https://rss2json.com/) proxy.
 - **Extraction**: [Gemini API](https://ai.google.dev/) (free tier), using
   structured JSON output (`response_schema`) so the response is already
   a typed list of locations, not free text to parse.
@@ -150,17 +152,23 @@ python fetch_locations.py     # loads .env automatically (run from this director
   failure — model 404, quota error — currently just fails that post's
   extraction; the script logs it and continues with any other new posts
   rather than aborting the whole run.
-- Substack occasionally returns HTTP 403 for a feed fetch coming from a
-  GitHub Actions runner's IP, even with a browser-like `User-Agent` —
-  seemingly a rate-limit or bot-detection heuristic rather than a
-  permanent block, since fetching the exact same URL from a regular
-  residential/office connection succeeds. The script retries a 403 up to
-  `FEED_FETCH_RETRIES` times with a short delay before giving up; if it
-  still fails, the run exits with a nonzero code (GitHub Actions marks
-  it failed and emails a notification) rather than skipping silently —
-  a real fetch failure should be visible, not swallowed. If 403s persist
-  across scheduled runs, this may need running from a non-datacenter IP
-  instead (e.g. a self-hosted runner or a proxy).
+- A direct feed fetch from a GitHub Actions runner's IP reliably gets
+  HTTP 403 with a Cloudflare "Just a moment..." interstitial page, even
+  with a browser-like `User-Agent` — this is Substack's/Cloudflare's
+  bot-challenge blocking datacenter IPs, not a simple rate limit, and
+  can't be worked around with request headers or retries (it requires
+  running actual JavaScript, which `requests` can't do). Fetching the
+  exact same URL from a regular residential/office connection succeeds.
+  The script retries a 403 up to `FEED_FETCH_RETRIES` times (in case
+  it's transient) and then falls back to fetching the feed through the
+  [rss2json.com](https://rss2json.com/) proxy, which fetches from its
+  own IP and returns the parsed feed as JSON. The free/keyless tier of
+  that proxy only returns the most recent 10 items, which is fine as
+  long as the script runs often enough that more than 10 posts rarely
+  pile up between runs. If both the direct fetch and the proxy fail, the
+  run exits with a nonzero code (GitHub Actions marks it failed and
+  emails a notification) rather than skipping silently — a real fetch
+  failure should be visible, not swallowed.
 - Coordinates are only as accurate as the LLM's geocoding of place names
   mentioned in the text — there's no independent verification against a
   real geocoding service. Spot-check new entries before trusting them
