@@ -15,6 +15,7 @@ import html
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -33,6 +34,13 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
+FEED_REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/rss+xml, application/xml, text/xml, */*;q=0.9",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+FEED_FETCH_RETRIES = 3
+FEED_FETCH_RETRY_DELAY_SECONDS = 5
 
 ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
 TITLE_PATTERN = re.compile(r"<title><!\[CDATA\[(.*?)\]\]></title>")
@@ -102,8 +110,18 @@ def clean_html(raw_html):
 
 def fetch_feed_posts(feed_url):
     """Fetch the RSS feed and return a list of posts, each with title,
-    url, published date, and plain-text content."""
-    response = requests.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT_SECONDS)
+    url, published date, and plain-text content.
+
+    Retries on a 403 response: Substack occasionally rate-limits or
+    briefly blocks a fetch that looks automated, and a short delay before
+    retrying can succeed where an immediate retry wouldn't."""
+    response = None
+    for attempt in range(1, FEED_FETCH_RETRIES + 1):
+        response = requests.get(feed_url, headers=FEED_REQUEST_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
+        if response.status_code != 403 or attempt == FEED_FETCH_RETRIES:
+            break
+        print(f"Feed fetch got HTTP 403 (attempt {attempt}/{FEED_FETCH_RETRIES}), retrying...")
+        time.sleep(FEED_FETCH_RETRY_DELAY_SECONDS)
     response.raise_for_status()
     xml = response.text
 

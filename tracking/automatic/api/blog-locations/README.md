@@ -150,6 +150,14 @@ python fetch_locations.py     # loads .env automatically (run from this director
   failure — model 404, quota error — currently just fails that post's
   extraction; the script logs it and continues with any other new posts
   rather than aborting the whole run.
+- Substack occasionally returns HTTP 403 for a feed fetch coming from a
+  GitHub Actions runner's IP, even with a browser-like `User-Agent` —
+  seemingly a rate-limit or bot-detection heuristic rather than a
+  permanent block, since fetching the exact same URL from a regular
+  residential/office connection succeeds. The script retries a 403 up to
+  `FEED_FETCH_RETRIES` times with a short delay before giving up; if 403s
+  persist across scheduled runs, this may need running from a
+  non-datacenter IP instead (e.g. a self-hosted runner or a proxy).
 - Coordinates are only as accurate as the LLM's geocoding of place names
   mentioned in the text — there's no independent verification against a
   real geocoding service. Spot-check new entries before trusting them
