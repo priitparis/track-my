@@ -9,7 +9,13 @@ orchestrator glue is tested in test_fetch_position.py.
 
 from unittest.mock import MagicMock, patch
 
-from sources import SOURCES, marineradar, myshiptracking
+from sources import (
+    SOURCES,
+    aisvesseltracker,
+    marineradar,
+    myshiptracking,
+    shipfinder,
+)
 from sources._common import SOURCE_FIELDS, blank_row
 
 
@@ -234,3 +240,176 @@ def test_marineradar_fetch_returns_none_without_coordinates():
 def test_marineradar_normalizes_trailing_z():
     assert marineradar._normalize_iso_utc("2026-08-28T06:51:58Z") == "2026-08-28T06:51:58+00:00"
     assert marineradar._normalize_iso_utc("") == ""
+
+
+# --- shipfinder -------------------------------------------------------
+
+SF_HTML = (
+    '<h1><img src="https://api.shipxy.com/apiresource/flags/EST.png" '
+    'class="mr_10" id="ais-flagImg" /><label id="ais-name">SANUK</label></h1>'
+    '<div class="status-description">The current position of <strong>SANUK</strong> '
+    'is in <span class="highlight">49-38.752 N, 1-37.201 W</span> reported at '
+    '<span class="highlight">2026-09-02 16:01:54</span>.</div>'
+    '<div class="info-grid">'
+    '<div class="info-label">IMO</div><div class="info-value" id="ais-imo">-</div>'
+    '<div class="info-label">Call Sign</div>'
+    '<div class="info-value" id="ais-callsign">ES4371</div>'
+    '<div class="info-label">Length</div>'
+    '<div class="info-value" id="ais-_length">14 m</div>'
+    '<div class="info-label">Width</div>'
+    '<div class="info-value" id="ais-_width">5 m</div>'
+    '<div class="info-label">Lat</div>'
+    '<div class="info-value" id="ais-_lat">49-38.752 N</div>'
+    '<div class="info-label">Lon</div>'
+    '<div class="info-value" id="ais-_lon">1-37.201 W</div>'
+    '<div class="info-label">Course</div>'
+    '<div class="info-value" id="ais-course_f">173.8 &#176;</div>'
+    '<div class="info-label">Speed</div>'
+    '<div class="info-value" id="ais-_sog">5.7 kn</div>'
+    '<div class="info-label">Draught</div>'
+    '<div class="info-value" id="ais-_draught">-</div>'
+    '<div class="info-label">Dest</div>'
+    '<div class="info-value" id="ais-dest">-</div>'
+    '<div class="info-label">Status</div>'
+    '<div class="info-value" id="ais-shipStatus">Under way</div>'
+    '<div class="info-label">Last update</div>'
+    '<div class="info-value" id="ais-lastTime">2026-09-02 16:01:54</div>'
+    '</div>'
+)
+
+
+def test_shipfinder_fetch_parses_core_fields():
+    with patch("sources.shipfinder.requests.get", return_value=_response(SF_HTML)):
+        row = shipfinder.fetch("276017710", timeout=5)
+    # 49 + 38.752/60 ; -(1 + 37.201/60)
+    assert row["lat"] == 49.645867
+    assert row["lon"] == -1.620017
+    assert row["reported_at"] == "2026-09-02T16:01:54+00:00"
+    assert row["speed"] == "5.7 kn"
+    assert row["course"] == "173.8 °"          # &#176; decoded
+    assert row["status"] == "Under way"
+    assert row["flag"] == "EST"                # from the flag image file name
+    assert row["call_sign"] == "ES4371"
+    assert row["size"] == "14 x 5 m"
+    assert row["imo"] == ""                    # lone '-' -> blank
+    assert row["draught"] == ""
+    assert row["area"] == ""
+    assert row["source"] == "shipfinder"
+
+
+def test_shipfinder_fetch_returns_none_without_coordinates():
+    with patch(
+        "sources.shipfinder.requests.get",
+        return_value=_response("<html>no position here</html>"),
+    ):
+        assert shipfinder.fetch("276017710", timeout=5) is None
+
+
+def test_shipfinder_to_decimal_degrees():
+    assert shipfinder._to_decimal_degrees("49-38.752 N") == 49.645867
+    assert shipfinder._to_decimal_degrees("1-37.201 W") == -1.620017
+    assert shipfinder._to_decimal_degrees("0-00.000 S") == 0.0
+    assert shipfinder._to_decimal_degrees("-") is None
+    assert shipfinder._to_decimal_degrees("") is None
+
+
+# --- aisvesseltracker ------------------------------------------------
+
+AVT_INITIAL_DATA = {
+    "id": 276017710,
+    "cog": 228.5,
+    "sog": 5.7,
+    "shipName": "SANUK",
+    "callSign": "ES4371",
+    "maxDraught": 2.4,
+    "imoNumber": 0,               # site's "unknown" sentinel -> blank
+    "flag": "EE",
+    "country": "Estonia",
+    "navigationalStatus": "Under way using engine",
+    "time_utc": "2026-09-01T20:02:30Z",
+    "length": 14,
+    "beam": 5,
+    "destination": "BOULOGNE",
+    "avgSpeed": 2.9085613523045124,
+    "maxSpeed": 10.5,
+    "longitude": -0.22798,
+    "latitude": 50.04312,
+    "weather": {
+        "temperature_c": 18.295480796160025,
+        "pressure_hpa": 1021.6848037611519,
+        "wind_speed_10m_ms": 5.288364414654898,
+        "wind_direction_10m_deg": 271.1325592850968,
+    },
+}
+
+
+def _avt_html(initial_data):
+    """Wrap an initialData object the way Next.js flushes it into the
+    page: a __next_f.push chunk carrying an escaped JSON string."""
+    import json as _json
+
+    inner = '23:["$","$L25",null,{"mmsi":"276017710","initialData":' \
+        + _json.dumps(initial_data) + '}]\n'
+    return (
+        "<html><body>"
+        + f'<script>self.__next_f.push([1,{_json.dumps(inner)}])</script>'
+        + "</body></html>"
+    )
+
+
+def test_aisvesseltracker_fetch_parses_initial_data():
+    html = _avt_html(AVT_INITIAL_DATA)
+    with patch("sources.aisvesseltracker.requests.get", return_value=_response(html)):
+        row = aisvesseltracker.fetch("276017710", timeout=5)
+    assert row["lat"] == 50.04312 and row["lon"] == -0.22798
+    assert row["reported_at"] == "2026-09-01T20:02:30+00:00"
+    assert row["speed"] == "5.7 knots"
+    assert row["course"] == "228.5 °"
+    assert row["status"] == "Under way using engine"
+    assert row["area"] == "BOULOGNE"
+    assert row["draught"] == "2.4"
+    assert row["imo"] == ""                     # 0 sentinel -> blank
+    assert row["flag"] == "EE"
+    assert row["call_sign"] == "ES4371"
+    assert row["size"] == "14 x 5 m"
+    assert row["avg_speed"] == "2.9 knots"
+    assert row["max_speed"] == "10.5 knots"
+    assert row["temperature"] == "18.3 °C"
+    assert row["pressure"] == "1021.7 hPa"
+    assert row["wind_speed"] == "5.3 m/s"
+    assert row["wind_direction"] == "271.1 °"
+    assert row["humidity"] == "" and row["cloud_coverage"] == ""
+    assert row["source"] == "aisvesseltracker"
+
+
+def test_aisvesseltracker_zero_sentinels_stay_blank():
+    data = dict(AVT_INITIAL_DATA, maxDraught=0, length=0, beam=0, callSign="")
+    with patch(
+        "sources.aisvesseltracker.requests.get",
+        return_value=_response(_avt_html(data)),
+    ):
+        row = aisvesseltracker.fetch("276017710", timeout=5)
+    assert row["draught"] == "" and row["size"] == "" and row["call_sign"] == ""
+
+
+def test_aisvesseltracker_fetch_returns_none_without_initial_data():
+    with patch(
+        "sources.aisvesseltracker.requests.get",
+        return_value=_response("<html><body>no data</body></html>"),
+    ):
+        assert aisvesseltracker.fetch("276017710", timeout=5) is None
+
+
+def test_aisvesseltracker_fetch_returns_none_without_coordinates():
+    data = dict(AVT_INITIAL_DATA)
+    del data["latitude"]
+    with patch(
+        "sources.aisvesseltracker.requests.get",
+        return_value=_response(_avt_html(data)),
+    ):
+        assert aisvesseltracker.fetch("276017710", timeout=5) is None
+
+
+def test_aisvesseltracker_normalizes_trailing_z():
+    assert aisvesseltracker._normalize_iso_utc("2026-09-01T20:02:30Z") == "2026-09-01T20:02:30+00:00"
+    assert aisvesseltracker._normalize_iso_utc("") == ""

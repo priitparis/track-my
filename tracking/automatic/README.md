@@ -11,12 +11,12 @@ the same pattern as [../manual/](../manual/).
 
 - [scraper/position/](scraper/position/) — primary method. Every 30
   minutes, scrapes several public vessel-tracking sites
-  (MyShipTracking.com, MarineRadar.com) for the ship's position and
-  records the one reporting the freshest AIS fix.
-- [scraper/myshiptracking-events/](scraper/myshiptracking-events/) —
-  scrapes MyShipTracking.com's separate event log (port arrivals/
-  departures, start/stop moving) daily, appending only events not
-  already recorded.
+  (MyShipTracking.com, MarineRadar.com, ShipFinder.com,
+  AISVesselTracker.com) for the ship's position and records the one
+  reporting the freshest AIS fix.
+- [scraper/events/](scraper/events/) — scrapes several sites' event
+  logs (port arrivals/departures, start/stop moving, coverage/sea-area
+  changes) daily, appending the union of events not already recorded.
 - [api/aisstream/](api/aisstream/) — secondary/backup method. Polls
   AISStream.io's AIS WebSocket API for the ship's position every 3
   hours (lower frequency, since it shares the same GitHub Actions

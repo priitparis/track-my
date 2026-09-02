@@ -1,4 +1,4 @@
-name: MyShipTracking event log tracker
+name: Ship event log tracker
 
 on:
   schedule:
@@ -17,7 +17,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r tracking/automatic/scraper/myshiptracking-events/requirements.txt
+        run: pip install -r tracking/automatic/scraper/events/requirements.txt
 
       - name: Write service account key to a temp file
         run: echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-service-account.json"
@@ -32,4 +32,4 @@ jobs:
           GOOGLE_SHEET_TAB: Events
           LOOKBACK_DAYS: "30"
           REQUEST_TIMEOUT_SECONDS: "30"
-        run: python tracking/automatic/scraper/myshiptracking-events/fetch_events.py
+        run: python tracking/automatic/scraper/events/fetch_events.py

@@ -23,9 +23,11 @@ there.
 |---|---|---|
 | [sources/myshiptracking.py](sources/myshiptracking.py) | [myshiptracking.com](https://www.myshiptracking.com/) | `(lat, lon)` from a `<script>` block's AJAX URL string; speed/course/trip/weather/vessel-info from the page's clearly-sectioned tables (`ft-info`, `ft-trip`, `ft-position`, `ft-weather`); the AIS "reported on" time from the page's prose summary. |
 | [sources/marineradar.py](sources/marineradar.py) | [marineradar.com](https://www.marineradar.com/) | The Next.js server-data payload embedded in the page (`self.__next_f.push([...])` chunks) carries a structured `ship` object: coordinates, `last_position` (AIS time), speed/course/heading/navigation-status, plus static details (call sign, IMO, AIS dimensions → size, tonnage, year built, draught) when present. Weather is a second request to MarineRadar's own `GET /api/weather?lat=&lon=` (an Open-Meteo passthrough): temperature, humidity, pressure, wind. |
+| [sources/shipfinder.py](sources/shipfinder.py) | [shipfinder.com](https://www.shipfinder.com/) | The vessel detail page is fully server-rendered: current AIS fix and static vessel details sit in an `id="ais-…"` info grid, and the "reported at" time in the `ais-lastTime` cell. Coordinates are degrees + decimal-minutes with a hemisphere letter (`49-38.752 N`), converted to signed decimal degrees. Fills lat/lon, reported-at, speed, course, status, call sign, size, and flag (from the flag image's file name); no weather, tonnage or year-built on this page. |
+| [sources/aisvesseltracker.py](sources/aisvesseltracker.py) | [aisvesseltracker.com](https://aisvesseltracker.com/) (Voyage Radar) | Next.js app; the page streams its server data as `self.__next_f.push([...])` chunks (same shape as MarineRadar). Brace-matching the embedded `"initialData": { … }` object yields one record with coordinates, `time_utc` (AIS time), speed/course/navigation-status, static details (call sign, IMO, flag, AIS dimensions → size, draught), current-trip avg/max speed and destination, and a nested `weather` object (temperature, pressure, wind). `0` is the site's "unknown" sentinel for imo/draught/dimensions and maps to blank. No humidity or cloud-cover figure. |
 
-Neither site needs an API key or account, and the data is served over
-plain HTTP (in the page's HTML, or a public JSON endpoint) — no
+None of these sites needs an API key or account, and the data is served
+over plain HTTP (in the page's HTML, or a public JSON endpoint) — no
 JavaScript rendering or headless browser.
 
 Sites investigated and **not** usable for precise position without a

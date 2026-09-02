@@ -17,11 +17,20 @@ to SOURCES below. The orchestrator queries every source, then keeps the
 row whose `reported_at` is newest.
 """
 
-from . import marineradar, myshiptracking
+from . import aisvesseltracker
+from . import marineradar
+from . import myshiptracking
+from . import shipfinder
 
 # Order matters only for tie-breaking: when two sources report the same
 # (or an unknown) observation time, the one earlier in this list wins.
 # MyShipTracking first, as the established primary source.
-SOURCES = [myshiptracking, marineradar]
+SOURCES = [myshiptracking, marineradar, shipfinder, aisvesseltracker]
 
-__all__ = ["SOURCES", "myshiptracking", "marineradar"]
+__all__ = [
+    "SOURCES",
+    "myshiptracking",
+    "marineradar",
+    "shipfinder",
+    "aisvesseltracker",
+]
