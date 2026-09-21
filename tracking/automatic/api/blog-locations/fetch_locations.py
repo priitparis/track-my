@@ -42,6 +42,7 @@ FEED_REQUEST_HEADERS = {
 FEED_FETCH_RETRIES = 2
 FEED_FETCH_RETRY_DELAY_SECONDS = 5
 RSS2JSON_API_URL = "https://api.rss2json.com/v1/api.json"
+ALLORIGINS_API_URL = "https://api.allorigins.win/raw"
 
 ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
 TITLE_PATTERN = re.compile(r"<title><!\[CDATA\[(.*?)\]\]></title>")
@@ -161,17 +162,30 @@ def fetch_feed_posts_via_proxy(feed_url):
     Cloudflare bot-challenge for datacenter IPs like GitHub Actions
     runners) — the proxy fetches the feed from its own IP and returns it
     as JSON. The free/keyless tier only returns the most recent 10 items,
-    which is fine given how often this script runs (see README)."""
+    which is fine given how often this script runs (see README).
+
+    Retries on a failed request/response a couple of times with a short
+    delay first, in case it's a transient hiccup on the proxy's end
+    (e.g. a 500), the same way fetch_feed_xml retries a 403."""
     print(f"Direct fetch failed; falling back to rss2json.com proxy for {feed_url} ...")
-    response = requests.get(
-        RSS2JSON_API_URL,
-        params={"rss_url": feed_url},
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    data = response.json()
-    if data.get("status") != "ok":
-        raise requests.RequestException(f"rss2json.com returned an error: {data}")
+    for attempt in range(1, FEED_FETCH_RETRIES + 1):
+        try:
+            response = requests.get(
+                RSS2JSON_API_URL,
+                params={"rss_url": feed_url},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if data.get("status") != "ok":
+                raise requests.RequestException(f"rss2json.com returned an error: {data}")
+            break
+        except requests.RequestException as e:
+            if attempt == FEED_FETCH_RETRIES:
+                raise
+            print(f"rss2json.com proxy fetch failed (attempt {attempt}/{FEED_FETCH_RETRIES}): {e}, "
+                  f"retrying in {FEED_FETCH_RETRY_DELAY_SECONDS}s...")
+            time.sleep(FEED_FETCH_RETRY_DELAY_SECONDS)
 
     items = data.get("items", [])
     print(f"Proxy fetch responded with {len(items)} item(s).")
@@ -187,16 +201,55 @@ def fetch_feed_posts_via_proxy(feed_url):
     ]
 
 
+def fetch_feed_posts_via_allorigins(feed_url):
+    """Fetch the feed through the allorigins.win proxy instead of directly.
+    Used as a second fallback, tried only if both the direct fetch and
+    the rss2json.com proxy fail — allorigins.win fetches the feed from
+    its own IP and returns the raw feed body as-is (unlike rss2json.com,
+    it's a generic passthrough, not an RSS-specific service), so it's
+    parsed with the same parse_feed_xml() as a direct fetch and isn't
+    limited to the most recent 10 items.
+
+    Retries on a failed request a couple of times with a short delay
+    first, the same way the other two fetch paths do."""
+    print(f"rss2json.com proxy also failed; falling back to allorigins.win proxy for {feed_url} ...")
+    for attempt in range(1, FEED_FETCH_RETRIES + 1):
+        try:
+            response = requests.get(
+                ALLORIGINS_API_URL,
+                params={"url": feed_url},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt == FEED_FETCH_RETRIES:
+                raise
+            print(f"allorigins.win proxy fetch failed (attempt {attempt}/{FEED_FETCH_RETRIES}): {e}, "
+                  f"retrying in {FEED_FETCH_RETRY_DELAY_SECONDS}s...")
+            time.sleep(FEED_FETCH_RETRY_DELAY_SECONDS)
+
+    print(f"allorigins.win proxy fetch responded with {len(response.text)} bytes.")
+    return parse_feed_xml(response.text)
+
+
 def fetch_feed_posts(feed_url):
     """Fetch the RSS feed and return a list of posts, each with title,
     url, published date, and plain-text content. Tries a direct fetch
-    first, falling back to the rss2json.com proxy if that fails."""
+    first, falling back to the rss2json.com proxy and then the
+    allorigins.win proxy if that fails."""
     try:
         xml = fetch_feed_xml(feed_url)
+        return parse_feed_xml(xml)
     except requests.RequestException as e:
         print(f"Direct feed fetch failed: {e}")
+
+    try:
         return fetch_feed_posts_via_proxy(feed_url)
-    return parse_feed_xml(xml)
+    except requests.RequestException as e:
+        print(f"rss2json.com proxy fetch failed: {e}")
+
+    return fetch_feed_posts_via_allorigins(feed_url)
 
 
 def extract_locations(client, post_text):
@@ -260,7 +313,7 @@ def main():
     try:
         posts = fetch_feed_posts(cfg["feed_url"])
     except requests.RequestException as e:
-        sys.exit(f"Failed to fetch blog feed (direct fetch and rss2json.com proxy both failed): {e}")
+        sys.exit(f"Failed to fetch blog feed (direct fetch and both proxy fallbacks failed): {e}")
 
     print(f"Feed contains {len(posts)} post(s).")
 

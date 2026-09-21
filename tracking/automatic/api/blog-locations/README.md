@@ -21,7 +21,9 @@ hand — automated and running on a free LLM tier.
   each post's full HTML content (`content:encoded`) — no scraping of the
   blog's web pages needed. Fetched directly first; if that's blocked
   (see "Known limitations"), falls back to fetching the same feed
-  through the [rss2json.com](https://rss2json.com/) proxy.
+  through the [rss2json.com](https://rss2json.com/) proxy, and then
+  through the [allorigins.win](https://allorigins.win/) proxy if the
+  first proxy also fails.
 - **Extraction**: [Gemini API](https://ai.google.dev/) (free tier), using
   structured JSON output (`response_schema`) so the response is already
   a typed list of locations, not free text to parse.
@@ -40,6 +42,10 @@ hand — automated and running on a free LLM tier.
   posts whose URL is already recorded in the `Blog` sheet tab, sends
   each new post's cleaned text to Gemini, and appends the extracted
   locations as rows.
+- [test_fetch_locations.py](test_fetch_locations.py) — unit tests for
+  the feed-fetching fallback chain (direct fetch, then the rss2json.com
+  and allorigins.win proxies), against mocked HTTP responses. (`pytest`;
+  dev-only, not in requirements.txt.)
 - [requirements.txt](requirements.txt) — Python dependencies
   (`requests`, `gspread`, `google-auth`, `google-genai`, `pydantic`,
   `python-dotenv`).
@@ -125,6 +131,9 @@ cp .env.example .env          # fill in the real values; .env is git-ignored
 # points at it by default
 
 python fetch_locations.py     # loads .env automatically (run from this directory)
+
+# run the tests (needs pytest, not in requirements.txt):
+pip install pytest && pytest
 ```
 
 ## Known limitations
@@ -165,10 +174,16 @@ python fetch_locations.py     # loads .env automatically (run from this director
   own IP and returns the parsed feed as JSON. The free/keyless tier of
   that proxy only returns the most recent 10 items, which is fine as
   long as the script runs often enough that more than 10 posts rarely
-  pile up between runs. If both the direct fetch and the proxy fail, the
-  run exits with a nonzero code (GitHub Actions marks it failed and
-  emails a notification) rather than skipping silently — a real fetch
-  failure should be visible, not swallowed.
+  pile up between runs. Each proxy fetch is itself retried up to
+  `FEED_FETCH_RETRIES` times, since the free/keyless proxy tiers are
+  themselves prone to transient failures (e.g. an occasional 500). If
+  the rss2json.com proxy also fails after its retries, the script falls
+  back once more to the [allorigins.win](https://allorigins.win/) proxy,
+  a generic passthrough that returns the raw feed body (not limited to
+  10 items). If the direct fetch and both proxies all fail, the run
+  exits with a nonzero code (GitHub Actions marks it failed and emails a
+  notification) rather than skipping silently — a real fetch failure
+  should be visible, not swallowed.
 - Coordinates are only as accurate as the LLM's geocoding of place names
   mentioned in the text — there's no independent verification against a
   real geocoding service. Spot-check new entries before trusting them
